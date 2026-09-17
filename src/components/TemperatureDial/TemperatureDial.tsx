@@ -1,13 +1,16 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
-import { colorForDelta, glowColorForDelta, TEMP, tempFToOffset, offsetDisplay, theme } from '@/src/lib/tempColors'
+import { ArrowDown, ArrowUp } from 'lucide-react'
+import { TEMP, tempFToOffset, offsetDisplay } from '@/src/lib/tempColors'
 import { displayToSetpointF, formatSetpointF, setpointFToDisplay, type TempUnit } from '@/src/lib/tempUtils'
 
 // Dial geometry — matches iOS TemperatureDialView
 const DIAL_SIZE = 280
-const RING_WIDTH = 10
+const RING_WIDTH = 6
+// Reserved padding around the ring for the thumb (kept at 22 so the viewBox geometry is stable)
 const THUMB_SIZE = 22
+const THUMB_RADIUS = 10
 const START_ANGLE = 135 // degrees
 const TOTAL_SWEEP = 270 // degrees
 const RADIUS = DIAL_SIZE / 2
@@ -100,15 +103,17 @@ export function TemperatureDial({
   const currentProgress = tempToProgress(currentTempF)
   const delta = targetTempF - currentTempF
 
-  const ringColor = isOn ? colorForDelta(delta) : '#333333'
-  const tempColor = isOn ? colorForDelta(delta) : theme.textMuted
-  const glow = isOn ? glowColorForDelta(delta) : { color: '#888', opacity: 0.2 }
+  // One calm temperature colour: cool / neutral / warm (iOS system colours via Tailwind tokens)
+  const tempColor = !isOn
+    ? 'var(--color-zinc-500)'
+    : delta <= -2
+      ? 'var(--color-sky-400)'
+      : delta >= 2
+        ? 'var(--color-orange-400)'
+        : 'var(--color-zinc-400)'
 
-  // Direction label
   const direction = isOn && targetTempF !== currentTempF
-    ? targetTempF > currentTempF
-      ? { text: 'WARMING', color: theme.warming }
-      : { text: 'COOLING', color: theme.cooling }
+    ? targetTempF > currentTempF ? 'Warming' : 'Cooling'
     : null
 
   const offset = tempFToOffset(targetTempF)
@@ -188,29 +193,20 @@ export function TemperatureDial({
 
   // --- Arc paths ---
   const bgArcPath = arcPath(0, 1)
+  const targetArcPath = targetProgress > 0 ? arcPath(0, targetProgress) : null
 
-  // Journey arc between current and target
-  const fromProgress = Math.min(currentProgress, targetProgress)
-  const toProgress = Math.max(currentProgress, targetProgress)
-  const journeyPath = fromProgress !== toProgress ? arcPath(fromProgress, toProgress) : null
-
-  // Target arc from start to target
-  const targetArcPath = arcPath(0, targetProgress)
-
-  // Thumb position
   const thumbPos = progressToPoint(targetProgress)
 
-  // Current temp marker
-  const currentMarkerPos = progressToPoint(currentProgress)
-  const markerAngle = START_ANGLE + currentProgress * TOTAL_SWEEP
-  const nowLabelPos = progressToPoint(currentProgress, RADIUS + 20)
+  // Current temperature tick, drawn across the track
+  const tickInner = progressToPoint(currentProgress, RADIUS - 9)
+  const tickOuter = progressToPoint(currentProgress, RADIUS + 9)
 
   return (
-    <div className="flex items-center justify-center py-2 sm:py-4" style={{ touchAction: 'none' }}>
+    <div className="flex items-center justify-center" style={{ touchAction: 'none' }}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEW_SIZE} ${VIEW_HEIGHT}`}
-        className="w-full max-w-[302px] select-none"
+        className="w-full max-w-[300px] select-none"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -224,65 +220,38 @@ export function TemperatureDial({
         aria-valuetext={formatSetpointF(targetTempF, unit)}
         tabIndex={isOn ? 0 : -1}
       >
-        {/* Background track (full arc) */}
+        {/* Track */}
         <path
           d={bgArcPath}
           fill="none"
-          stroke="#222222"
+          stroke="var(--color-zinc-800)"
           strokeWidth={RING_WIDTH}
           strokeLinecap="round"
         />
 
-        {/* Colored journey arc between current and target */}
-        {isOn && journeyPath && (
-          <path
-            d={journeyPath}
-            fill="none"
-            stroke={ringColor}
-            strokeOpacity={0.4}
-            strokeWidth={RING_WIDTH + 4}
-            strokeLinecap="round"
-          />
-        )}
-
-        {/* Target position arc (from start to target) */}
-        {isOn && (
+        {/* Filled arc up to the target */}
+        {isOn && targetArcPath && (
           <path
             d={targetArcPath}
             fill="none"
-            stroke={ringColor}
+            stroke={tempColor}
             strokeWidth={RING_WIDTH}
             strokeLinecap="round"
           />
         )}
 
-        {/* Current temperature "NOW" marker */}
+        {/* Current temperature tick */}
         {isOn && (
-          <g>
-            <line
-              x1={currentMarkerPos.x}
-              y1={currentMarkerPos.y - 6}
-              x2={currentMarkerPos.x}
-              y2={currentMarkerPos.y + 6}
-              stroke="white"
-              strokeOpacity={0.6}
-              strokeWidth={2}
-              strokeLinecap="round"
-              transform={`rotate(${markerAngle + 90}, ${currentMarkerPos.x}, ${currentMarkerPos.y})`}
-            />
-            <text
-              x={nowLabelPos.x}
-              y={nowLabelPos.y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fill="white"
-              fillOpacity={0.5}
-              fontSize={7}
-              fontWeight="bold"
-            >
-              NOW
-            </text>
-          </g>
+          <line
+            x1={tickInner.x}
+            y1={tickInner.y}
+            x2={tickOuter.x}
+            y2={tickOuter.y}
+            stroke="white"
+            strokeOpacity={0.7}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
         )}
 
         {/* Draggable thumb */}
@@ -290,10 +259,10 @@ export function TemperatureDial({
           <circle
             cx={thumbPos.x}
             cy={thumbPos.y}
-            r={THUMB_SIZE / 2}
+            r={THUMB_RADIUS}
             fill="white"
             style={{
-              filter: `drop-shadow(0 0 6px ${glow.color}) drop-shadow(0 1px 3px rgba(0,0,0,0.3))`,
+              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))',
               cursor: isDragging ? 'grabbing' : 'grab',
             }}
           />
@@ -301,10 +270,10 @@ export function TemperatureDial({
 
         {/* Center content */}
         <foreignObject
-          x={CENTER - 100}
-          y={CENTER - 60}
-          width={200}
-          height={120}
+          x={CENTER - 110}
+          y={CENTER - 70}
+          width={220}
+          height={140}
         >
           <div
             className="flex h-full flex-col items-center justify-center"
@@ -313,66 +282,34 @@ export function TemperatureDial({
             {isOn
               ? (
                   <>
-                    {/* Direction label */}
-                    {direction && (
-                      <div className="mb-1 flex items-center gap-1.5">
-                        <span style={{ color: direction.color, fontSize: 10, fontWeight: 700 }}>
-                          {direction.text === 'WARMING' ? '🔥' : '❄️'}
-                        </span>
-                        <span
-                          className="tracking-widest"
-                          style={{
-                            color: direction.color,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            opacity: 0.9,
-                          }}
-                        >
-                          {direction.text}
-                        </span>
-                      </div>
-                    )}
+                    <div className="flex h-5 items-center gap-1 text-[15px] font-medium" style={{ color: tempColor }}>
+                      {direction === 'Warming' && <ArrowUp size={15} strokeWidth={2.25} aria-hidden />}
+                      {direction === 'Cooling' && <ArrowDown size={15} strokeWidth={2.25} aria-hidden />}
+                      {direction && <span>{direction}</span>}
+                    </div>
 
-                    {/* Target temperature (hero) */}
                     <span
-                      className="font-light tabular-nums"
-                      style={{
-                        color: tempColor,
-                        fontSize: 52,
-                        lineHeight: 1,
-                        fontVariantNumeric: 'tabular-nums',
-                      }}
+                      className="ios-numeric font-light tracking-tight text-white"
+                      style={{ fontSize: 72, lineHeight: 1.05 }}
                     >
-                      {formatSetpointF(targetTempF, unit)}
+                      {formatSetpointF(targetTempF, unit, { includeUnit: false })}
                     </span>
 
-                    {/* Offset + current temp */}
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span
-                        className="font-semibold tabular-nums"
-                        style={{
-                          color: tempColor,
-                          fontSize: 15,
-                          opacity: 0.7,
-                        }}
-                      >
-                        {offsetDisplay(offset)}
-                      </span>
-                      <span style={{ color: theme.textMuted, fontSize: 13 }}>·</span>
-                      <span style={{ color: theme.textMuted, fontSize: 13 }}>
-                        Now
-                        {' '}
-                        {formatSetpointF(currentTempF, unit)}
-                      </span>
-                    </div>
+                    <span className="ios-numeric mt-1 text-[15px] text-zinc-500">
+                      {offsetDisplay(offset)}
+                      {' · '}
+                      Now
+                      {' '}
+                      {formatSetpointF(currentTempF, unit)}
+                    </span>
                   </>
                 )
               : (
                   <span
-                    className="font-light"
-                    style={{ color: theme.textMuted, fontSize: 48 }}
+                    className="font-light text-zinc-500"
+                    style={{ fontSize: 56, lineHeight: 1.05 }}
                   >
-                    OFF
+                    Off
                   </span>
                 )}
           </div>
