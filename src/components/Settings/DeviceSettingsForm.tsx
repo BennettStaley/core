@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, Globe, Thermometer, RotateCcw, Droplets, Timer, Lightbulb, Loader2, ShieldAlert } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, CheckCircle2, ChevronRight, Loader2, Moon, Search } from 'lucide-react'
 import { trpc } from '@/src/utils/trpc'
-import { Toggle } from './Toggle'
-import { TimeInput } from '../Schedule/TimeInput'
+import { ListRow, ListSection, SegmentedControl, Sheet } from '@/src/ui/ios'
+import { NumberRow, SliderRow, SwitchRow, TimeRow } from './SettingsRows'
 
 interface DeviceSettings {
   timezone: string
@@ -306,27 +306,28 @@ export function DeviceSettingsForm({ device }: { device: DeviceSettings }) {
   }
 
   const showToast = isPending || savedFlash
+  const [tzSheetOpen, setTzSheetOpen] = useState(false)
 
   return (
-    <div className="space-y-4">
+    <>
       <div
         aria-live="polite"
         className={`pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-4 transition-opacity duration-200 sm:bottom-28 ${
           showToast ? 'opacity-100' : 'opacity-0'
         }`}
       >
-        <div className="flex items-center gap-2 rounded-full bg-zinc-800/95 px-3 py-1.5 text-xs font-medium text-zinc-200 shadow-lg ring-1 ring-zinc-700/60 backdrop-blur">
+        <div className="flex items-center gap-2 rounded-full bg-zinc-800/95 px-3.5 py-2 text-[13px] font-medium text-zinc-200 backdrop-blur">
           {isPending
             ? (
                 <>
-                  <Loader2 size={12} className="animate-spin text-sky-400" />
+                  <Loader2 size={14} className="animate-spin text-sky-400" />
                   Saving…
                 </>
               )
             : savedFlash
               ? (
                   <>
-                    <CheckCircle2 size={12} className="text-emerald-400" />
+                    <CheckCircle2 size={14} className="text-emerald-400" />
                     Saved
                   </>
                 )
@@ -334,350 +335,283 @@ export function DeviceSettingsForm({ device }: { device: DeviceSettings }) {
         </div>
       </div>
 
-      {/* Timezone */}
-      <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Globe size={16} className="text-zinc-400" />
-          <span className="text-sm font-medium text-zinc-300">Timezone</span>
-        </div>
-        <select
-          value={timezone}
-          onChange={e => handleTimezoneChange(e.target.value)}
+      <ListSection>
+        <ListRow
+          title="Time zone"
+          onClick={() => setTzSheetOpen(true)}
           disabled={isPending}
-          className="h-11 w-full rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-sm font-medium text-white outline-none transition-colors focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {TIMEZONES.map(tz => (
-            <option key={tz} value={tz}>
-              {tz.replace(/_/g, ' ')}
-            </option>
-          ))}
-          {/* Include current timezone if not in common list */}
-          {!TIMEZONES.includes(timezone) && (
-            <option value={timezone}>{timezone.replace(/_/g, ' ')}</option>
+          value={<span className="block max-w-[170px] truncate">{formatZone(timezone)}</span>}
+          accessory={<ChevronRight size={18} className="shrink-0 text-zinc-600" />}
+        />
+        <ListRow
+          title="Temperature"
+          accessory={(
+            <SegmentedControl
+              aria-label="Temperature unit"
+              className="w-[112px] shrink-0"
+              options={[{ value: 'F', label: '°F' }, { value: 'C', label: '°C' }]}
+              value={tempUnit === 'C' ? 'C' : 'F'}
+              onChange={(unit) => {
+                if (!isPending && unit !== tempUnit) handleTempUnitChange(unit)
+              }}
+            />
           )}
-        </select>
-      </div>
+        />
+      </ListSection>
 
-      {/* Temperature Unit */}
-      <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Thermometer size={16} className="text-zinc-400" />
-          <span className="text-sm font-medium text-zinc-300">Temperature Unit</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => handleTempUnitChange('F')}
-            disabled={isPending}
-            className={`rounded-lg min-h-[44px] text-[13px] font-medium transition-colors disabled:opacity-50 sm:text-sm ${
-              tempUnit === 'F'
-                ? 'bg-sky-500/20 text-sky-400'
-                : 'bg-zinc-800 text-zinc-400 active:bg-zinc-700'
-            }`}
-          >
-            °F
-          </button>
-          <button
-            onClick={() => handleTempUnitChange('C')}
-            disabled={isPending}
-            className={`rounded-lg min-h-[44px] text-[13px] font-medium transition-colors disabled:opacity-50 sm:text-sm ${
-              tempUnit === 'C'
-                ? 'bg-sky-500/20 text-sky-400'
-                : 'bg-zinc-800 text-zinc-400 active:bg-zinc-700'
-            }`}
-          >
-            °C
-          </button>
-        </div>
-      </div>
+      <TimezoneSheet
+        open={tzSheetOpen}
+        value={timezone}
+        onClose={() => setTzSheetOpen(false)}
+        onSelect={(tz) => {
+          setTzSheetOpen(false)
+          if (tz !== timezone) handleTimezoneChange(tz)
+        }}
+      />
 
-      {/* Auto Reboot */}
-      <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <RotateCcw size={16} className={rebootDaily ? 'text-sky-400' : 'text-zinc-400'} />
-            <span className="text-sm font-medium text-zinc-300">Daily Reboot</span>
-          </div>
-          <Toggle
-            enabled={rebootDaily}
-            onToggle={handleRebootToggle}
-            disabled={isPending}
-            label="Toggle daily reboot"
-          />
-        </div>
+      <ListSection header="Maintenance">
+        <SwitchRow
+          title="Daily reboot"
+          checked={rebootDaily}
+          onChange={handleRebootToggle}
+          disabled={isPending}
+          ariaLabel="Toggle daily reboot"
+        />
         {rebootDaily && (
-          <div className="mt-2">
-            <TimeInput
-              label="Reboot Time"
-              value={rebootTime}
-              onChange={handleRebootTimeChange}
-              disabled={isPending}
-            />
-          </div>
+          <TimeRow id="rebootTime" title="Reboot at" value={rebootTime} onChange={handleRebootTimeChange} disabled={isPending} />
         )}
-      </div>
-
-      {/* Prime Pod */}
-      <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Droplets size={16} className={primePodDaily ? 'text-sky-400' : 'text-zinc-400'} />
-            <span className="text-sm font-medium text-zinc-300">Daily Prime Pod</span>
-          </div>
-          <Toggle
-            enabled={primePodDaily}
-            onToggle={handlePrimeToggle}
-            disabled={isPending}
-            label="Toggle daily prime pod"
-          />
-        </div>
+        <SwitchRow
+          title="Daily prime"
+          checked={primePodDaily}
+          onChange={handlePrimeToggle}
+          disabled={isPending}
+          ariaLabel="Toggle daily prime pod"
+        />
         {primePodDaily && (
-          <div className="mt-2">
-            <TimeInput
-              label="Prime Time"
-              value={primePodTime}
-              onChange={handlePrimeTimeChange}
-              disabled={isPending}
-            />
-          </div>
+          <TimeRow id="primeTime" title="Prime at" value={primePodTime} onChange={handlePrimeTimeChange} disabled={isPending} />
         )}
-      </div>
+      </ListSection>
 
-      {/* Global auto-off cap (wall-clock safety net) */}
-      <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Timer size={16} className={maxOnEnabled ? 'text-sky-400' : 'text-zinc-400'} />
-            <span className="text-sm font-medium text-zinc-300">Auto Power-Off Cap</span>
-          </div>
-          <Toggle
-            enabled={maxOnEnabled}
-            onToggle={handleMaxOnToggle}
-            disabled={isPending}
-            label="Toggle global auto power-off cap"
-          />
-        </div>
-        <p className="mb-2 text-xs text-zinc-500">
-          Forces any side that has been on for longer than this to power off. Runs on top of the per-side auto-off. Always-on sides and active run-once sessions are exempt.
-        </p>
+      <ListSection footer="Forces any side that has been on longer than this to power off. Runs on top of the per-side auto-off. Always-on sides and active run-once sessions are exempt.">
+        <SwitchRow
+          title="Auto power-off cap"
+          checked={maxOnEnabled}
+          onChange={handleMaxOnToggle}
+          disabled={isPending}
+          ariaLabel="Toggle global auto power-off cap"
+        />
         {maxOnEnabled && (
-          <div className="mt-2 flex items-center gap-2">
-            <label htmlFor="maxOnHours" className="text-sm text-zinc-300">
-              Hours
-            </label>
-            <input
-              id="maxOnHours"
-              type="number"
-              min={1}
-              max={48}
-              step={1}
-              value={maxOnHours}
-              onChange={e => handleMaxOnHoursChange(Number(e.target.value))}
-              disabled={isPending}
-              className="h-11 w-24 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-sm font-medium text-white outline-none transition-colors focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* LED brightness + night mode */}
-      <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Lightbulb size={16} className="text-zinc-400" />
-          <span className="text-sm font-medium text-zinc-300">Pod LED</span>
-        </div>
-
-        <div className="mb-4">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-400">Brightness</span>
-            <span className="text-xs font-medium text-white">
-              {ledDayBrightness}
-              %
-            </span>
-          </div>
-          <input
-            aria-label="LED brightness"
-            type="range"
-            min={0}
-            max={100}
+          <NumberRow
+            id="maxOnHours"
+            title="Turn off after"
+            unit="h"
+            min={1}
+            max={48}
             step={1}
-            value={ledDayBrightness}
-            onChange={e => handleLedDayChange(parseInt(e.target.value, 10))}
-            onPointerUp={commitLedDay}
-            onKeyUp={commitLedDay}
+            value={maxOnHours}
+            onChange={handleMaxOnHoursChange}
             disabled={isPending}
-            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-sky-500 disabled:cursor-not-allowed disabled:opacity-40 [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-7 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-sky-500"
           />
-          <div className="flex justify-between text-[10px] text-zinc-600">
-            <span>0%</span>
-            <span>100%</span>
-          </div>
-        </div>
-
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm font-medium text-zinc-300">Night Mode</span>
-          <Toggle
-            enabled={ledNightEnabled}
-            onToggle={handleLedNightToggle}
-            disabled={isPending}
-            label="Toggle LED night mode"
-          />
-        </div>
-        {ledNightEnabled && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <TimeInput
-                label="Start"
-                value={ledNightStart}
-                onChange={handleLedNightStartChange}
-                disabled={isPending}
-              />
-              <TimeInput
-                label="End"
-                value={ledNightEnd}
-                onChange={handleLedNightEndChange}
-                disabled={isPending}
-              />
-            </div>
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-xs font-medium text-zinc-400">Night brightness</span>
-                <span className="text-xs font-medium text-white">
-                  {ledNightBrightness}
-                  %
-                </span>
-              </div>
-              <input
-                aria-label="LED night brightness"
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={ledNightBrightness}
-                onChange={e => handleLedNightBrightnessChange(parseInt(e.target.value, 10))}
-                onPointerUp={commitLedNightBrightness}
-                onKeyUp={commitLedNightBrightness}
-                disabled={isPending}
-                className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-sky-500 disabled:cursor-not-allowed disabled:opacity-40 [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-7 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-sky-500"
-              />
-              <div className="flex justify-between text-[10px] text-zinc-600">
-                <span>0%</span>
-                <span>100%</span>
-              </div>
-            </div>
-          </div>
         )}
-      </div>
+      </ListSection>
 
-      {/* Pump safety */}
-      <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShieldAlert size={16} className={pumpStallEnabled ? 'text-red-400' : 'text-zinc-400'} />
-            <span className="text-sm font-medium text-zinc-300">Pump safety</span>
-          </div>
-          <Toggle
-            enabled={pumpStallEnabled}
-            onToggle={handlePumpStallToggle}
+      <ListSection header="Pod light">
+        <SliderRow
+          ariaLabel="LED brightness"
+          value={ledDayBrightness}
+          onChange={handleLedDayChange}
+          onCommit={commitLedDay}
+          disabled={isPending}
+          valueLabel={`${ledDayBrightness}%`}
+        />
+        <SwitchRow
+          title="Night mode"
+          checked={ledNightEnabled}
+          onChange={handleLedNightToggle}
+          disabled={isPending}
+          ariaLabel="Toggle LED night mode"
+        />
+        {ledNightEnabled && (
+          <>
+            <TimeRow id="ledNightStart" title="From" value={ledNightStart} onChange={handleLedNightStartChange} disabled={isPending} />
+            <TimeRow id="ledNightEnd" title="To" value={ledNightEnd} onChange={handleLedNightEndChange} disabled={isPending} />
+          </>
+        )}
+      </ListSection>
+
+      {ledNightEnabled && (
+        <ListSection header="Night brightness" footer="The light dims to this level between the times above.">
+          <SliderRow
+            ariaLabel="LED night brightness"
+            value={ledNightBrightness}
+            onChange={handleLedNightBrightnessChange}
+            onCommit={commitLedNightBrightness}
             disabled={isPending}
-            label="Toggle pump stall protection"
+            valueLabel={`${ledNightBrightness}%`}
+            iconMax={Moon}
           />
-        </div>
-        <p className="mb-3 text-xs text-zinc-500">
-          When the pump RPM stays under the threshold for the dwell window, the side powers off until you re-enable it.
-        </p>
+        </ListSection>
+      )}
+
+      <ListSection
+        header="Pump safety"
+        footer={pumpStallEnabled
+          ? 'When pump RPM stays under the threshold for the dwell window, the side powers off until you re-enable it. Frames arrive about every 60 seconds.'
+          : 'When pump RPM stays under the threshold for the dwell window, the side powers off until you re-enable it.'}
+      >
+        <SwitchRow
+          title="Stall protection"
+          checked={pumpStallEnabled}
+          onChange={handlePumpStallToggle}
+          disabled={isPending}
+          ariaLabel="Toggle pump stall protection"
+        />
         {pumpStallEnabled && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <label htmlFor="pumpThresholdRpm" className="text-sm text-zinc-300">
-                Trip threshold (RPM)
-              </label>
-              <input
-                id="pumpThresholdRpm"
-                type="number"
-                min={100}
-                max={1500}
+          <>
+            <NumberRow
+              id="pumpThresholdRpm"
+              title="Trip threshold"
+              unit="RPM"
+              min={100}
+              max={1500}
+              step={50}
+              value={pumpStallThreshold}
+              onChange={handlePumpStallThreshold}
+              onBlur={commitPumpStallThreshold}
+              disabled={isPending}
+            />
+            <NumberRow
+              id="pumpStallDwell"
+              title="Dwell samples"
+              min={1}
+              max={10}
+              step={1}
+              value={pumpStallDwell}
+              onChange={handlePumpStallDwell}
+              onBlur={commitPumpStallDwell}
+              disabled={isPending}
+            />
+          </>
+        )}
+      </ListSection>
+
+      {pumpStallEnabled && (
+        <ListSection footer="Clears the trip once the pump holds the recovery speed for this many consecutive samples.">
+          <SwitchRow
+            title="Auto-recover"
+            checked={pumpAutoRecover}
+            onChange={handlePumpAutoRecoverToggle}
+            disabled={isPending}
+            ariaLabel="Toggle pump auto-recovery"
+          />
+          {pumpAutoRecover && (
+            <>
+              <NumberRow
+                id="pumpRecoveryRpm"
+                title="Recovery speed"
+                unit="RPM"
+                min={500}
+                max={3000}
                 step={50}
-                value={pumpStallThreshold}
-                onChange={e => handlePumpStallThreshold(Number(e.target.value))}
-                onBlur={commitPumpStallThreshold}
+                value={pumpRecoveryRpm}
+                onChange={handlePumpRecoveryRpm}
+                onBlur={commitPumpRecoveryRpm}
                 disabled={isPending}
-                className="h-11 w-28 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-sm font-medium text-white outline-none transition-colors focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
               />
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <label htmlFor="pumpStallDwell" className="text-sm text-zinc-300">
-                Dwell samples
-              </label>
-              <input
-                id="pumpStallDwell"
-                type="number"
+              <NumberRow
+                id="pumpRecoverySamples"
+                title="Recovery samples"
                 min={1}
                 max={10}
                 step={1}
-                value={pumpStallDwell}
-                onChange={e => handlePumpStallDwell(Number(e.target.value))}
-                onBlur={commitPumpStallDwell}
+                value={pumpRecoverySamples}
+                onChange={handlePumpRecoverySamples}
+                onBlur={commitPumpRecoverySamples}
                 disabled={isPending}
-                className="h-11 w-28 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-sm font-medium text-white outline-none transition-colors focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
               />
-            </div>
-            <p className="text-xs text-zinc-500">
-              Consecutive sub-threshold frames before tripping. Frames arrive every ~60 seconds.
-            </p>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-zinc-300">Auto-recover when pump returns</span>
-              <Toggle
-                enabled={pumpAutoRecover}
-                onToggle={handlePumpAutoRecoverToggle}
-                disabled={isPending}
-                label="Toggle pump auto-recovery"
-              />
-            </div>
-            {pumpAutoRecover && (
-              <>
-                <div className="flex items-center justify-between gap-2">
-                  <label htmlFor="pumpRecoveryRpm" className="text-sm text-zinc-300">
-                    Recovery RPM
-                  </label>
-                  <input
-                    id="pumpRecoveryRpm"
-                    type="number"
-                    min={500}
-                    max={3000}
-                    step={50}
-                    value={pumpRecoveryRpm}
-                    onChange={e => handlePumpRecoveryRpm(Number(e.target.value))}
-                    onBlur={commitPumpRecoveryRpm}
-                    disabled={isPending}
-                    className="h-11 w-28 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-sm font-medium text-white outline-none transition-colors focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <label htmlFor="pumpRecoverySamples" className="text-sm text-zinc-300">
-                    Recovery samples
-                  </label>
-                  <input
-                    id="pumpRecoverySamples"
-                    type="number"
-                    min={1}
-                    max={10}
-                    step={1}
-                    value={pumpRecoverySamples}
-                    onChange={e => handlePumpRecoverySamples(Number(e.target.value))}
-                    onBlur={commitPumpRecoverySamples}
-                    disabled={isPending}
-                    className="h-11 w-28 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-sm font-medium text-white outline-none transition-colors focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+            </>
+          )}
+        </ListSection>
+      )}
 
       {mutation.error && (
-        <p className="text-xs text-red-400">{mutation.error.message}</p>
+        <p className="px-4 text-[13px] text-red-400">{mutation.error.message}</p>
       )}
-    </div>
+    </>
+  )
+}
+
+function formatZone(tz: string) {
+  return tz.replace(/_/g, ' ')
+}
+
+/** Every IANA zone the runtime knows, falling back to the common list. */
+function allTimezones(): string[] {
+  try {
+    const intl = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }
+    const zones = intl.supportedValuesOf?.('timeZone')
+    if (zones && zones.length > 0) return zones
+  }
+  catch {
+    /* older runtime */
+  }
+  return TIMEZONES
+}
+
+/** Searchable time-zone picker, like Settings > General > Date & Time. */
+function TimezoneSheet({ open, value, onClose, onSelect }: {
+  open: boolean
+  value: string
+  onClose: () => void
+  onSelect: (tz: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const zones = useMemo(() => allTimezones(), [])
+
+  const q = query.trim().toLowerCase().replace(/\s+/g, '_')
+  const results = q
+    ? zones.filter(z => z.toLowerCase().includes(q))
+    : [value, ...TIMEZONES.filter(z => z !== value)]
+
+  function close() {
+    setQuery('')
+    onClose()
+  }
+
+  return (
+    <Sheet open={open} onClose={close} title="Time zone">
+      <div className="space-y-4">
+        <label className="flex h-9 items-center gap-1.5 rounded-[10px] bg-zinc-800 px-2 text-zinc-500">
+          <Search size={17} className="shrink-0" />
+          <input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search"
+            aria-label="Search time zones"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            className="min-w-0 flex-1 bg-transparent text-[17px] text-white outline-none placeholder:text-zinc-500"
+          />
+        </label>
+
+        <ListSection header={q ? undefined : 'Common'}>
+          {results.length === 0
+            ? <ListRow title={<span className="text-zinc-500">No results</span>} />
+            : results.slice(0, 200).map(tz => (
+                <ListRow
+                  key={tz}
+                  title={formatZone(tz)}
+                  onClick={() => {
+                    setQuery('')
+                    onSelect(tz)
+                  }}
+                  accessory={tz === value ? <Check size={20} className="shrink-0 text-sky-400" /> : undefined}
+                />
+              ))}
+        </ListSection>
+      </div>
+    </Sheet>
   )
 }

@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Wifi, Globe, User, KeyRound, Tag, Home, Lock, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { trpc } from '@/src/utils/trpc'
-import { Toggle } from './Toggle'
+import { ListRow, ListSection } from '@/src/ui/ios'
+import { ActionRow, PrimaryButton, SwitchRow, TextRow } from './SettingsRows'
 
 type Source = 'db' | 'env' | 'default'
 
@@ -18,11 +19,9 @@ interface MqttSettings {
   sources: Record<'enabled' | 'url' | 'username' | 'password' | 'topicPrefix' | 'haDiscovery' | 'tlsEnabled', Source>
 }
 
-type TextField = 'url' | 'username' | 'topicPrefix'
-
 function sourceLabel(s: Source): string | null {
-  if (s === 'env') return '.env'
-  if (s === 'default') return 'default'
+  if (s === 'env') return 'From .env'
+  if (s === 'default') return 'Default'
   return null
 }
 
@@ -54,8 +53,8 @@ export function MqttSettingsForm() {
   const data = settingsQuery.data
 
   return (
-    <div className="space-y-4">
-      <ConnectionStatusCard
+    <>
+      <ConnectionStatusSection
         connected={statusQuery.data?.connected ?? false}
         lastError={statusQuery.data?.lastError ?? null}
         messagesPublished={statusQuery.data?.messagesPublished ?? 0}
@@ -64,17 +63,13 @@ export function MqttSettingsForm() {
       />
 
       {settingsQuery.isLoading && (
-        <div className="h-40 animate-pulse rounded-2xl bg-zinc-900" />
+        <div className="h-40 animate-pulse rounded-xl bg-zinc-900" />
       )}
 
       {settingsQuery.error && (
-        <div className="rounded-2xl bg-zinc-900 p-4">
-          <p className="text-sm text-red-400">
-            Failed to load MQTT settings:
-            {' '}
-            {settingsQuery.error.message}
-          </p>
-        </div>
+        <ListSection footer={settingsQuery.error.message}>
+          <ListRow title={<span className="text-red-400">Failed to load MQTT settings</span>} />
+        </ListSection>
       )}
 
       {data && (
@@ -86,11 +81,11 @@ export function MqttSettingsForm() {
           }}
         />
       )}
-    </div>
+    </>
   )
 }
 
-interface ConnectionStatusCardProps {
+interface ConnectionStatusSectionProps {
   connected: boolean
   lastError: string | null
   messagesPublished: number
@@ -98,47 +93,32 @@ interface ConnectionStatusCardProps {
   loading: boolean
 }
 
-function ConnectionStatusCard({
+function ConnectionStatusSection({
   connected,
   lastError,
   messagesPublished,
   lastPublishAt,
   loading,
-}: ConnectionStatusCardProps) {
-  const Icon = connected ? CheckCircle2 : XCircle
-  const color = connected ? 'text-emerald-400' : 'text-zinc-500'
-
+}: ConnectionStatusSectionProps) {
   return (
-    <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Wifi size={16} className="text-zinc-400" />
-        <span className="text-sm font-medium text-zinc-300">Bridge Status</span>
-      </div>
-
-      <div className="flex items-center gap-2">
-        {loading
-          ? <Loader2 size={16} className="animate-spin text-zinc-400" />
-          : <Icon size={16} className={color} />}
-        <span className={`text-sm font-medium ${color}`}>
-          {loading ? 'Checking…' : connected ? 'Connected' : 'Disconnected'}
-        </span>
-      </div>
-
-      <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <div>
-          <dt className="text-zinc-500">Messages published</dt>
-          <dd className="text-zinc-300">{messagesPublished.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt className="text-zinc-500">Last publish</dt>
-          <dd className="text-zinc-300">{relativeTime(lastPublishAt)}</dd>
-        </div>
-      </dl>
-
-      {lastError && (
-        <p className="mt-2 break-words text-xs text-red-400">{lastError}</p>
-      )}
-    </div>
+    <ListSection
+      header="Bridge status"
+      footer={lastError ? <span className="break-words text-red-400">{lastError}</span> : undefined}
+    >
+      <ListRow
+        title="Status"
+        value={loading
+          ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 size={15} className="animate-spin" />
+                Checking…
+              </span>
+            )
+          : <span className={connected ? 'text-emerald-400' : undefined}>{connected ? 'Connected' : 'Disconnected'}</span>}
+      />
+      <ListRow title="Messages published" value={messagesPublished.toLocaleString()} />
+      <ListRow title="Last publish" value={relativeTime(lastPublishAt)} />
+    </ListSection>
   )
 }
 
@@ -220,250 +200,119 @@ function SettingsCard({ data, onSaved }: SettingsCardProps) {
 
   const canTest = Boolean(url.trim() || data.url)
 
-  return (
-    <div className="space-y-5">
-      {/* Master enable + HA discovery (closely related — what does the bridge do) */}
-      <div className="space-y-2">
-        <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Wifi size={16} className={enabled ? 'text-sky-400' : 'text-zinc-400'} />
-              <div>
-                <span className="text-sm font-medium text-zinc-300">Enable MQTT Bridge</span>
-                <p className="text-xs text-zinc-500">Publishes status + biometrics, accepts commands</p>
-              </div>
-            </div>
-            <Toggle
-              enabled={enabled}
-              onToggle={() => setEnabled(v => !v)}
-              disabled={isPending}
-              label="Toggle MQTT bridge"
-            />
-          </div>
-        </div>
-        <ToggleCard
-          icon={<Home size={16} className={haDiscovery ? 'text-sky-400' : 'text-zinc-400'} />}
-          label="Home Assistant Discovery"
-          description="Publishes climate/switch/sensor entities"
-          enabled={haDiscovery}
-          onToggle={() => setHaDiscovery(v => !v)}
-          disabled={isPending}
-          ariaLabel="Toggle Home Assistant discovery"
-        />
-      </div>
-
-      {/* Connection */}
-      <Section label="Connection">
-        <TextFieldCard
-          icon={<Globe size={16} className="text-zinc-400" />}
-          label="Broker URL"
-          field="url"
-          value={url}
-          placeholder={data.url || 'mqtt://broker.local:1883'}
-          source={data.sources.url}
-          onChange={setUrl}
-          disabled={isPending}
-          autoComplete="off"
-        />
-        <ToggleCard
-          icon={<Lock size={16} className={tlsEnabled ? 'text-sky-400' : 'text-zinc-400'} />}
-          label="TLS"
-          description="Use mqtts:// transport"
-          enabled={tlsEnabled}
-          onToggle={() => setTlsEnabled(v => !v)}
-          disabled={isPending}
-          ariaLabel="Toggle TLS"
-        />
-        <button
-          onClick={handleTest}
-          disabled={!canTest || testMutation.isPending}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 px-3 py-3 text-sm font-medium text-zinc-300 transition-colors active:bg-zinc-800 disabled:opacity-50"
-        >
-          {testMutation.isPending && <Loader2 size={14} className="animate-spin" />}
-          Test Connection
-        </button>
-        {testMutation.data && (
-          <p className={`text-xs ${testMutation.data.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+  const testFooter = testMutation.error
+    ? <span className="text-red-400">{testMutation.error.message}</span>
+    : testMutation.data
+      ? (
+          <span className={testMutation.data.ok ? 'text-emerald-400' : 'text-red-400'}>
             {testMutation.data.ok
               ? 'Connection succeeded.'
               : `Connection failed: ${testMutation.data.error ?? 'unknown error'}`}
-          </p>
-        )}
-        {testMutation.error && (
-          <p className="text-xs text-red-400">{testMutation.error.message}</p>
-        )}
-      </Section>
+          </span>
+        )
+      : undefined
 
-      {/* Authentication */}
-      <Section
-        label="Authentication"
-        hint="Leave both blank for anonymous brokers (e.g. local Mosquitto with allow_anonymous true)."
-      >
-        <TextFieldCard
-          icon={<User size={16} className="text-zinc-400" />}
-          label="Username"
-          field="username"
+  const authFooter = [
+    'Leave both blank for anonymous brokers (e.g. local Mosquitto with allow_anonymous true).',
+    data.sources.password === 'env' ? 'The password is currently sourced from .env.' : null,
+  ].filter(Boolean).join(' ')
+
+  return (
+    <>
+      <ListSection footer="Publishes status and biometrics, accepts commands, and creates climate, switch and sensor entities in Home Assistant.">
+        <SwitchRow
+          title="MQTT bridge"
+          checked={enabled}
+          onChange={() => setEnabled(v => !v)}
+          disabled={isPending}
+          ariaLabel="Toggle MQTT bridge"
+        />
+        <SwitchRow
+          title="Home Assistant discovery"
+          checked={haDiscovery}
+          onChange={() => setHaDiscovery(v => !v)}
+          disabled={isPending}
+          ariaLabel="Toggle Home Assistant discovery"
+        />
+      </ListSection>
+
+      <ListSection header="Connection" footer={testFooter}>
+        <TextRow
+          id="mqtt-url"
+          title="Broker"
+          subtitle={sourceLabel(data.sources.url)}
+          value={url}
+          placeholder={data.url || 'mqtt://broker.local:1883'}
+          onChange={e => setUrl(e.target.value)}
+          disabled={isPending}
+          autoComplete="off"
+          inputMode="url"
+        />
+        <SwitchRow
+          title="TLS"
+          subtitle="Use mqtts:// transport"
+          checked={tlsEnabled}
+          onChange={() => setTlsEnabled(v => !v)}
+          disabled={isPending}
+          ariaLabel="Toggle TLS"
+        />
+        <ActionRow
+          title="Test connection"
+          onClick={handleTest}
+          disabled={!canTest || testMutation.isPending}
+          trailing={testMutation.isPending ? <Loader2 size={17} className="animate-spin text-zinc-500" /> : undefined}
+        />
+      </ListSection>
+
+      <ListSection header="Authentication" footer={authFooter}>
+        <TextRow
+          id="mqtt-username"
+          title="Username"
+          subtitle={sourceLabel(data.sources.username)}
           value={username}
-          placeholder={data.username || ''}
-          source={data.sources.username}
-          onChange={setUsername}
+          placeholder={data.username || 'Optional'}
+          onChange={e => setUsername(e.target.value)}
           disabled={isPending}
           autoComplete="off"
         />
-        <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <KeyRound size={16} className="text-zinc-400" />
-              <span className="text-sm font-medium text-zinc-300">Password</span>
-            </div>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                data.passwordIsSet
-                  ? 'bg-emerald-500/15 text-emerald-400'
-                  : 'bg-zinc-800 text-zinc-500'
-              }`}
-            >
-              {data.passwordIsSet ? 'set' : 'unset'}
-            </span>
-          </div>
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder={data.passwordIsSet ? '••••••••' : ''}
-            autoComplete="new-password"
-            disabled={isPending}
-            className="h-11 w-full rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-sm font-medium text-white outline-none transition-colors focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
-          />
-          {data.sources.password === 'env' && (
-            <p className="mt-1.5 text-xs text-zinc-500">Currently sourced from .env</p>
-          )}
-        </div>
-      </Section>
+        <TextRow
+          id="mqtt-password"
+          type="password"
+          title="Password"
+          subtitle={data.passwordIsSet ? 'Set' : 'Not set'}
+          value={password}
+          placeholder={data.passwordIsSet ? '••••••••' : 'Optional'}
+          onChange={e => setPassword(e.target.value)}
+          disabled={isPending}
+          autoComplete="new-password"
+        />
+      </ListSection>
 
-      {/* Topics */}
-      <Section label="Topics">
-        <TextFieldCard
-          icon={<Tag size={16} className="text-zinc-400" />}
-          label="Topic Prefix"
-          field="topicPrefix"
+      <ListSection header="Topics">
+        <TextRow
+          id="mqtt-topic-prefix"
+          title="Topic prefix"
+          subtitle={sourceLabel(data.sources.topicPrefix)}
           value={topicPrefix}
           placeholder="sleepypod"
-          source={data.sources.topicPrefix}
-          onChange={setTopicPrefix}
+          onChange={e => setTopicPrefix(e.target.value)}
           disabled={isPending}
           autoComplete="off"
         />
-      </Section>
+      </ListSection>
 
-      {/* Save */}
-      <button
-        onClick={handleSave}
-        disabled={isPending}
-        className="flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500/20 px-3 py-3 text-sm font-medium text-sky-400 transition-colors active:bg-sky-500/30 disabled:opacity-50"
-      >
-        {isPending && <Loader2 size={14} className="animate-spin" />}
-        {isPending ? 'Saving…' : 'Save'}
-      </button>
-
-      {updateMutation.error && (
-        <p className="text-xs text-red-400">{updateMutation.error.message}</p>
-      )}
-      {updateMutation.isSuccess && (
-        <p className="text-xs text-emerald-400">Settings saved.</p>
-      )}
-    </div>
-  )
-}
-
-interface SectionProps {
-  label: string
-  hint?: string
-  children: React.ReactNode
-}
-
-function Section({ label, hint, children }: SectionProps) {
-  return (
-    <section className="space-y-2">
-      <h3 className="px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">{label}</h3>
-      {children}
-      {hint && <p className="px-1 text-xs text-zinc-500">{hint}</p>}
-    </section>
-  )
-}
-
-interface ToggleCardProps {
-  icon: React.ReactNode
-  label: string
-  description: string
-  enabled: boolean
-  onToggle: () => void
-  disabled?: boolean
-  ariaLabel: string
-}
-
-function ToggleCard({ icon, label, description, enabled, onToggle, disabled, ariaLabel }: ToggleCardProps) {
-  return (
-    <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {icon}
-          <div>
-            <span className="text-sm font-medium text-zinc-300">{label}</span>
-            <p className="text-xs text-zinc-500">{description}</p>
-          </div>
-        </div>
-        <Toggle enabled={enabled} onToggle={onToggle} disabled={disabled} label={ariaLabel} />
-      </div>
-    </div>
-  )
-}
-
-interface TextFieldCardProps {
-  icon: React.ReactNode
-  label: string
-  field: TextField
-  value: string
-  placeholder: string
-  source: Source
-  onChange: (v: string) => void
-  disabled?: boolean
-  autoComplete?: string
-}
-
-function TextFieldCard({
-  icon,
-  label,
-  value,
-  placeholder,
-  source,
-  onChange,
-  disabled,
-  autoComplete,
-}: TextFieldCardProps) {
-  const sourceTag = sourceLabel(source)
-  return (
-    <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {icon}
-          <span className="text-sm font-medium text-zinc-300">{label}</span>
-        </div>
-        {sourceTag && (
-          <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-400">
-            {sourceTag}
-          </span>
+      <div className="space-y-1.5">
+        <PrimaryButton onClick={handleSave} disabled={isPending}>
+          {isPending && <Loader2 size={18} className="animate-spin" />}
+          {isPending ? 'Saving…' : 'Save'}
+        </PrimaryButton>
+        {updateMutation.error && (
+          <p className="px-4 text-[13px] text-red-400">{updateMutation.error.message}</p>
+        )}
+        {updateMutation.isSuccess && (
+          <p className="px-4 text-[13px] text-emerald-400">Settings saved.</p>
         )}
       </div>
-      <input
-        type="text"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        disabled={disabled}
-        className="h-11 w-full rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-sm font-medium text-white outline-none transition-colors focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
-      />
-    </div>
+    </>
   )
 }
