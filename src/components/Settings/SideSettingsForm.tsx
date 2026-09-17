@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { User, Plane, Timer, Infinity as InfinityIcon } from 'lucide-react'
+import { ListSection } from '@/src/ui/ios'
 import { trpc } from '@/src/utils/trpc'
-import { Toggle } from './Toggle'
+import { SelectRow, SwitchRow, TextRow } from './SettingsRows'
 
 interface SideData {
   side: 'left' | 'right'
@@ -27,6 +27,13 @@ interface SideSettingsFormProps {
 }
 
 const AUTO_OFF_DURATION_OPTIONS = [5, 10, 15, 30, 45, 60, 90, 120] as const
+
+function formatMinutes(mins: number) {
+  if (mins < 60) return `${mins} min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m ? `${h} h ${m} min` : `${h} h`
+}
 
 /**
  * Per-side settings: name, away mode, always on, and auto-off for a single side.
@@ -125,117 +132,80 @@ function SideCard({ data, presenceAvailable }: { data: SideData, presenceAvailab
     mutation.mutate({ side: data.side, autoOffMinutes: minutes })
   }
 
-  return (
-    <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <User size={16} className="text-zinc-400" />
-        <span className="text-sm font-medium text-zinc-300">
-          {sideLabel}
-          {' '}
-          Side
-        </span>
-      </div>
+  const autoOffOptions = (AUTO_OFF_DURATION_OPTIONS as readonly number[]).includes(autoOffMinutes)
+    ? AUTO_OFF_DURATION_OPTIONS
+    : [...AUTO_OFF_DURATION_OPTIONS, autoOffMinutes].sort((a, b) => a - b)
 
-      {/* Name input */}
-      <div className="mb-3">
-        <label className="mb-1.5 block text-xs font-medium text-zinc-400">Name</label>
-        <input
-          type="text"
+  const autoOffFooter = presenceUnavailable
+    ? (
+        <span className="text-amber-400">
+          {autoOffEnabled
+            ? 'Presence sensing is unavailable, so auto-off is currently inactive. Calibrate the capacitance sensor for this side to restore it.'
+            : 'Requires presence sensing. Calibrate the capacitance sensor for this side to enable auto-off.'}
+        </span>
+      )
+    : 'Turns this side off after the bed has been empty for the chosen time.'
+
+  return (
+    <>
+      <ListSection header={`${sideLabel} side`}>
+        <TextRow
+          id={`side-name-${data.side}`}
+          title="Name"
           value={name}
           onChange={e => setName(e.target.value)}
           onBlur={handleNameBlur}
           onKeyDown={handleNameKeyDown}
           maxLength={20}
           disabled={isPending}
-          className="h-11 w-full rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 text-sm font-medium text-white outline-none transition-colors focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
           placeholder={sideLabel}
+          enterKeyHint="done"
         />
-      </div>
+      </ListSection>
 
-      {/* Away mode toggle */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Plane size={14} className={awayMode ? 'text-sky-400' : 'text-zinc-500'} />
-          <span className="text-sm text-zinc-300">Away Mode</span>
-        </div>
-        <Toggle
-          enabled={awayMode}
-          onToggle={handleAwayToggle}
+      <ListSection>
+        <SwitchRow
+          title="Away mode"
+          checked={awayMode}
+          onChange={handleAwayToggle}
           disabled={isPending}
-          label={`Toggle away mode for ${sideLabel} side`}
+          ariaLabel={`Toggle away mode for ${sideLabel} side`}
         />
-      </div>
+      </ListSection>
 
-      {/* Always On toggle */}
-      <div className="mt-3 border-t border-zinc-800 pt-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <InfinityIcon size={14} className={alwaysOn ? 'text-sky-400' : 'text-zinc-500'} />
-            <div>
-              <span className="text-sm text-zinc-300">Always On</span>
-              <p className="text-xs text-zinc-500">Prevents firmware&apos;s 8-hour auto-off</p>
-            </div>
-          </div>
-          <Toggle
-            enabled={alwaysOn}
-            onToggle={handleAlwaysOnToggle}
-            disabled={isPending}
-            label={`Toggle always on for ${sideLabel} side`}
-          />
-        </div>
-      </div>
+      <ListSection footer="Prevents the firmware's 8-hour auto-off. Turning this on disables auto-off when empty.">
+        <SwitchRow
+          title="Always on"
+          checked={alwaysOn}
+          onChange={handleAlwaysOnToggle}
+          disabled={isPending}
+          ariaLabel={`Toggle always on for ${sideLabel} side`}
+        />
+      </ListSection>
 
-      {/* Auto-off toggle */}
-      <div className="mt-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Timer size={14} className={autoOffEnabled ? 'text-sky-400' : 'text-zinc-500'} />
-          <span className="text-sm text-zinc-300">Auto-off when empty</span>
-        </div>
-        <Toggle
-          enabled={autoOffEnabled}
-          onToggle={handleAutoOffToggle}
+      <ListSection footer={autoOffFooter}>
+        <SwitchRow
+          title="Auto-off when empty"
+          checked={autoOffEnabled}
+          onChange={handleAutoOffToggle}
           disabled={autoOffToggleDisabled}
-          label={`Toggle auto-off for ${sideLabel} side`}
+          ariaLabel={`Toggle auto-off for ${sideLabel} side`}
         />
-      </div>
-
-      {/* Presence-sensing gate: explain why auto-off is unavailable / inactive */}
-      {presenceUnavailable && (
-        <p className="mt-2 text-xs text-amber-400/80">
-          {autoOffEnabled
-            ? 'Presence sensing is unavailable, so auto-off is currently inactive. Calibrate the capacitance sensor for this side to restore it.'
-            : 'Requires presence sensing. Calibrate the capacitance sensor for this side to enable auto-off.'}
-        </p>
-      )}
-
-      {/* Auto-off duration picker (shown when enabled) */}
-      {autoOffEnabled && (
-        <div className="mt-3">
-          <label className="mb-1.5 block text-xs font-medium text-zinc-400">
-            Auto-off after
-          </label>
-          <div className="flex flex-wrap gap-1.5">
-            {AUTO_OFF_DURATION_OPTIONS.map(mins => (
-              <button
-                key={mins}
-                onClick={() => handleAutoOffMinutesChange(mins)}
-                disabled={isPending}
-                className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
-                  autoOffMinutes === mins
-                    ? 'bg-sky-500/20 text-sky-400 ring-1 ring-sky-500/40'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                }`}
-              >
-                {mins < 60 ? `${mins}m` : `${mins / 60}h${mins % 60 ? ` ${mins % 60}m` : ''}`}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+        {autoOffEnabled && (
+          <SelectRow
+            title="Turn off after"
+            ariaLabel="Auto-off after"
+            value={autoOffMinutes}
+            options={autoOffOptions.map(m => ({ value: m, label: formatMinutes(m) }))}
+            onChange={handleAutoOffMinutesChange}
+            disabled={isPending}
+          />
+        )}
+      </ListSection>
 
       {mutation.error && (
-        <p className="mt-2 text-xs text-red-400">{mutation.error.message}</p>
+        <p className="px-4 text-[13px] text-red-400">{mutation.error.message}</p>
       )}
-    </div>
+    </>
   )
 }
