@@ -132,15 +132,25 @@ beforeEach(() => {
 })
 
 describe('health.scheduler', () => {
-  it('returns counts and unhealthy=true when scheduler enabled but empty', async () => {
+  it('returns unhealthy when enabled and empty but the DB has enabled schedules', async () => {
     schedulerMock.scheduler.isEnabled.mockReturnValue(true)
     schedulerMock.scheduler.getJobs.mockReturnValue([])
+    dbMock.allSchedules.pow.push({ id: 1 })
 
     const result = await caller.scheduler({})
     expect(result.enabled).toBe(true)
     expect(result.jobCounts.total).toBe(0)
-    // The point: enabled with zero jobs → unhealthy
+    // The point: schedules exist but none were loaded → unhealthy
     expect(result.healthy).toBe(false)
+  })
+
+  it('returns healthy when enabled and empty because no schedules exist yet', async () => {
+    schedulerMock.scheduler.isEnabled.mockReturnValue(true)
+    schedulerMock.scheduler.getJobs.mockReturnValue([])
+
+    const result = await caller.scheduler({})
+    expect(result.jobCounts.total).toBe(0)
+    expect(result.healthy).toBe(true)
   })
 
   it('returns healthy=true when scheduler is disabled regardless of count', async () => {
