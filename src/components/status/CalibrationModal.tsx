@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { trpc } from '@/src/utils/trpc'
 import { useSide } from '@/src/hooks/useSide'
 import { useSideNames } from '@/src/hooks/useSideNames'
-import { X, RefreshCw, Bed, Thermometer, Fingerprint, CheckCircle, XCircle, Clock, Loader2 } from 'lucide-react'
+import { Sheet } from '@/src/ui/ios'
+import { RefreshCw, Bed, Thermometer, Fingerprint, CheckCircle, XCircle, Clock, Loader2 } from 'lucide-react'
 
 type SensorType = 'piezo' | 'capacitance' | 'temperature'
 
@@ -20,10 +21,10 @@ interface CalibrationProfile {
   errorMessage: string | null
 }
 
-const SENSOR_CONFIG: Record<SensorType, { label: string, icon: typeof Bed, color: string }> = {
-  piezo: { label: 'Piezo', icon: Bed, color: 'text-violet-400' },
-  capacitance: { label: 'Capacitance', icon: Fingerprint, color: 'text-cyan-400' },
-  temperature: { label: 'Temperature', icon: Thermometer, color: 'text-orange-400' },
+const SENSOR_CONFIG: Record<SensorType, { label: string, icon: typeof Bed, tile: string }> = {
+  piezo: { label: 'Piezo', icon: Bed, tile: 'bg-purple-500' },
+  capacitance: { label: 'Capacitance', icon: Fingerprint, tile: 'bg-teal-500' },
+  temperature: { label: 'Temperature', icon: Thermometer, tile: 'bg-orange-500' },
 }
 
 function statusIcon(status: string) {
@@ -93,54 +94,42 @@ export function CalibrationModal({ open, onClose }: { open: boolean, onClose: ()
     || status.temperature?.status === 'running' || status.temperature?.status === 'pending'
   )
 
-  if (!open) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex flex-col">
-      <div className="flex-1 bg-black/60" onClick={onClose} />
-      <div className="flex max-h-[80dvh] flex-col rounded-t-2xl border-t border-zinc-800 bg-zinc-950">
-        {/* Drag handle */}
-        <div className="flex justify-center pt-2 pb-1">
-          <div className="h-1 w-8 rounded-full bg-zinc-700" />
-        </div>
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Calibration"
+      leading={<span />}
+      trailing={(
+        <button type="button" onClick={onClose} className="text-[17px] font-semibold text-sky-400 active:opacity-50">
+          Done
+        </button>
+      )}
+    >
+      <div className="space-y-6">
+        {/* Status feedback */}
+        {(triggerSingle.data || triggerFull.data) && (
+          <p className="rounded-xl bg-zinc-900 px-4 py-3 text-[15px] text-emerald-400">
+            {triggerSingle.data?.message || triggerFull.data?.message}
+          </p>
+        )}
+        {(triggerSingle.error || triggerFull.error) && (
+          <p className="rounded-xl bg-zinc-900 px-4 py-3 text-[15px] text-red-400">
+            {triggerSingle.error?.message || triggerFull.error?.message}
+          </p>
+        )}
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 pb-3">
-          <div className="flex items-center gap-2">
-            <RefreshCw size={14} className="text-zinc-400" />
-            <span className="text-sm font-medium text-zinc-300">Calibration</span>
-            <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">
-              {sideName(side)}
-            </span>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 active:text-zinc-300">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-4 pb-8 space-y-4">
-          {/* Status feedback */}
-          {(triggerSingle.data || triggerFull.data) && (
-            <div className="rounded-lg bg-emerald-900/20 px-3 py-2 text-[11px] text-emerald-400">
-              {triggerSingle.data?.message || triggerFull.data?.message}
-            </div>
-          )}
-          {(triggerSingle.error || triggerFull.error) && (
-            <div className="rounded-lg bg-red-900/20 px-3 py-2 text-[11px] text-red-400">
-              {triggerSingle.error?.message || triggerFull.error?.message}
-            </div>
-          )}
-
-          {/* Sensor rows */}
+        {/* Sensor rows */}
+        <section className="space-y-1.5">
+          <h2 className="px-4 text-[13px] leading-[18px] text-zinc-500">{`Sensors · ${sideName(side)}`}</h2>
           {statusLoading
             ? (
-                <div className="flex h-24 items-center justify-center">
-                  <Loader2 size={18} className="animate-spin text-zinc-600" />
+                <div className="flex h-24 items-center justify-center rounded-xl bg-zinc-900">
+                  <Loader2 size={20} className="animate-spin text-zinc-600" />
                 </div>
               )
             : (
-                <div className="space-y-2">
+                <div className="overflow-hidden rounded-xl bg-zinc-900 [&>*+*]:border-t [&>*+*]:border-zinc-800">
                   {(['piezo', 'capacitance', 'temperature'] as const).map((type) => {
                     const config = SENSOR_CONFIG[type]
                     const Icon = config.icon
@@ -149,50 +138,45 @@ export function CalibrationModal({ open, onClose }: { open: boolean, onClose: ()
                     const isActive = profile?.status === 'running' || profile?.status === 'pending'
 
                     return (
-                      <div key={type} className="flex items-center gap-2.5 rounded-xl bg-zinc-900 p-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-800">
-                          <Icon size={16} className={config.color} />
-                        </div>
+                      <div key={type} className="flex min-h-[60px] items-center gap-3 px-4 py-2.5">
+                        <span className={`grid h-[29px] w-[29px] shrink-0 place-items-center rounded-[7px] text-white ${config.tile}`}>
+                          <Icon size={17} strokeWidth={2} />
+                        </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-medium text-zinc-300">{config.label}</span>
+                            <span className="text-[17px] leading-[22px] text-white">{config.label}</span>
                             {profile && statusIcon(profile.status)}
                           </div>
                           {profile
                             ? (
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-xs font-semibold tabular-nums ${qualityColor(profile.qualityScore)}`}>
+                                <p className="ios-numeric truncate text-[13px] leading-[18px] text-zinc-500">
+                                  <span className={`font-semibold ${qualityColor(profile.qualityScore)}`}>
                                     {qualityLabel(profile.qualityScore)}
                                   </span>
-                                  {profile.samplesUsed !== null && (
-                                    <span className="text-[10px] text-zinc-600">
-                                      {profile.samplesUsed}
-                                      {' '}
-                                      samples
-                                    </span>
-                                  )}
-                                  <span className="text-[10px] text-zinc-600">{formatDate(profile.createdAt)}</span>
-                                </div>
+                                  {profile.samplesUsed !== null && ` · ${profile.samplesUsed} samples`}
+                                  {` · ${formatDate(profile.createdAt)}`}
+                                </p>
                               )
                             : (
-                                <span className="text-[10px] text-zinc-600">No calibration</span>
+                                <p className="text-[13px] leading-[18px] text-zinc-500">No calibration</p>
                               )}
                           {profile?.errorMessage && (
-                            <p className="mt-0.5 text-[10px] text-red-400/80 line-clamp-2">{profile.errorMessage}</p>
+                            <p className="line-clamp-2 text-[13px] leading-[18px] text-red-400">{profile.errorMessage}</p>
                           )}
                         </div>
                         <button
+                          type="button"
                           onClick={() => handleTrigger(type)}
                           disabled={isTriggering || isActive}
-                          className="shrink-0 rounded-lg bg-zinc-800 px-3 py-2 text-[11px] font-semibold text-zinc-300 transition-colors active:bg-zinc-700 disabled:text-zinc-600"
+                          className="min-h-[44px] shrink-0 pl-2 text-[17px] text-sky-400 active:opacity-50 disabled:text-zinc-600"
                         >
                           {isTriggering
                             ? (
-                                <Loader2 size={12} className="animate-spin" />
+                                <Loader2 size={18} className="animate-spin" />
                               )
                             : isActive
                               ? (
-                                  profile?.status === 'running' ? 'Running...' : 'Pending'
+                                  profile?.status === 'running' ? 'Running…' : 'Pending'
                                 )
                               : (
                                   'Calibrate'
@@ -203,24 +187,21 @@ export function CalibrationModal({ open, onClose }: { open: boolean, onClose: ()
                   })}
                 </div>
               )}
+        </section>
 
-          {/* Full calibration button */}
-          <button
-            onClick={() => triggerFull.mutate({})}
-            disabled={triggerFull.isPending || !!isAnyActive}
-            className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl border border-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-400 transition-colors active:bg-zinc-800 disabled:opacity-50"
-          >
-            {triggerFull.isPending
-              ? (
-                  <Loader2 size={14} className="animate-spin" />
-                )
-              : (
-                  <RefreshCw size={14} />
-                )}
-            Calibrate All Sensors
-          </button>
-        </div>
+        {/* Full calibration button */}
+        <button
+          type="button"
+          onClick={() => triggerFull.mutate({})}
+          disabled={triggerFull.isPending || !!isAnyActive}
+          className="flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-sky-500 text-[17px] font-semibold text-white active:opacity-80 disabled:opacity-40"
+        >
+          {triggerFull.isPending
+            ? <Loader2 size={18} className="animate-spin" />
+            : <RefreshCw size={18} />}
+          Calibrate all sensors
+        </button>
       </div>
-    </div>
+    </Sheet>
   )
 }

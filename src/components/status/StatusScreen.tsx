@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { trpc } from '@/src/utils/trpc'
 import { PullToRefresh } from '@/src/components/PullToRefresh/PullToRefresh'
@@ -23,7 +22,9 @@ import {
   Cog,
   Gauge,
   ChevronRight,
+  SquareTerminal,
 } from 'lucide-react'
+import { ListRow, ListSection, PageHeader } from '@/src/ui/ios'
 
 const POLL_INTERVAL = 10_000
 
@@ -61,6 +62,7 @@ function formatRelativeTime(isoString: string): string {
 export function StatusScreen() {
   const [waterModalOpen, setWaterModalOpen] = useState(false)
   const [calibrationModalOpen, setCalibrationModalOpen] = useState(false)
+  const [consoleOpen, setConsoleOpen] = useState(false)
 
   // Language prefix for in-app links (e.g. /en/debug), mirroring BottomNav.
   const pathname = usePathname()
@@ -174,7 +176,7 @@ export function StatusScreen() {
   // Network — WiFi + Internet only
   const networkServices = [
     {
-      name: 'WiFi',
+      name: 'Wi-Fi',
       description: wifi.data?.connected
         ? `${wifi.data.ssid ?? 'Connected'} \u00b7 ${wifi.data.signal ?? 0}%`
         : 'Not connected',
@@ -204,74 +206,49 @@ export function StatusScreen() {
     nextRun: string | null
   }> | undefined
 
+  const jobBreakdown = jobCounts
+    ? ([
+        ['Temperature', jobCounts.temperature],
+        ['Power on', jobCounts.powerOn],
+        ['Power off', jobCounts.powerOff],
+        ['Alarm', jobCounts.alarm],
+        ['Prime', jobCounts.prime],
+        ['Reboot', jobCounts.reboot],
+      ] as const).filter(([, count]) => count > 0)
+    : []
+
   const schedulerExpandedContent = (
-    <div className="space-y-3">
-      {jobCounts && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium text-zinc-400">Job Breakdown</p>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs sm:grid-cols-3 sm:gap-x-4">
-            {jobCounts.temperature > 0 && (
-              <span className="text-zinc-300">
-                Temp:
-                {jobCounts.temperature}
+    <div className="space-y-3 text-[13px] leading-[18px]">
+      {jobBreakdown.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-zinc-500">Job breakdown</p>
+          <div className="ios-numeric grid grid-cols-2 gap-x-3 gap-y-0.5">
+            {jobBreakdown.map(([label, count]) => (
+              <span key={label} className="flex justify-between gap-2 text-zinc-300">
+                <span>{label}</span>
+                <span className="text-zinc-500">{count}</span>
               </span>
-            )}
-            {jobCounts.powerOn > 0 && (
-              <span className="text-zinc-300">
-                On:
-                {jobCounts.powerOn}
-              </span>
-            )}
-            {jobCounts.powerOff > 0 && (
-              <span className="text-zinc-300">
-                Off:
-                {jobCounts.powerOff}
-              </span>
-            )}
-            {jobCounts.alarm > 0 && (
-              <span className="text-zinc-300">
-                Alarm:
-                {jobCounts.alarm}
-              </span>
-            )}
-            {jobCounts.prime > 0 && (
-              <span className="text-zinc-300">
-                Prime:
-                {jobCounts.prime}
-              </span>
-            )}
-            {jobCounts.reboot > 0 && (
-              <span className="text-zinc-300">
-                Reboot:
-                {jobCounts.reboot}
-              </span>
-            )}
+            ))}
           </div>
         </div>
       )}
       {drift && (
-        <div className="text-xs text-zinc-400">
+        <p className={drift.drifted ? 'text-amber-400' : 'text-zinc-500'}>
           {drift.drifted
-            ? `Drifted: ${drift.dbScheduleCount} DB vs ${drift.schedulerJobCount} active`
+            ? `Drifted: ${drift.dbScheduleCount} in database vs ${drift.schedulerJobCount} active`
             : `In sync \u00b7 ${drift.dbScheduleCount} schedules`}
-        </div>
+        </p>
       )}
       {upcomingJobs && upcomingJobs.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium text-zinc-400">Upcoming Jobs</p>
+        <div className="space-y-1">
+          <p className="text-zinc-500">Upcoming jobs</p>
           {upcomingJobs.slice(0, 5).map(job => (
-            <div key={job.id} className="flex items-center justify-between text-xs">
+            <div key={job.id} className="flex items-center justify-between gap-3">
               <span className="text-zinc-300">
                 {job.type}
-                {job.side && (
-                  <span className="ml-1 text-zinc-500">
-                    (
-                    {job.side}
-                    )
-                  </span>
-                )}
+                {job.side && <span className="ml-1 text-zinc-500">{`(${job.side})`}</span>}
               </span>
-              <span className="text-zinc-500">
+              <span className="ios-numeric text-zinc-500">
                 {job.nextRun ? formatRelativeTime(job.nextRun) : '\u2014'}
               </span>
             </div>
@@ -289,7 +266,9 @@ export function StatusScreen() {
 
   return (
     <PullToRefresh onRefresh={handleRefresh}>
-      <div className="space-y-3">
+      <div className="space-y-6 pb-4">
+        <PageHeader title="Status" />
+
         <HealthCircle
           healthy={totalHealthy}
           total={totalServices}
@@ -309,108 +288,107 @@ export function StatusScreen() {
         {/* Pump alert history — renders only while active alerts exist */}
         <PumpAlertsCard />
 
-        {/* System info — branch/commit/build date + full disk usage */}
-        <SystemInfoCard />
+        {/* Service health groups */}
+        <ListSection header="Health" className="[&>div>div]:rounded-none">
+          <HealthStatusCard
+            title="Core"
+            description="Server, database, and scheduler"
+            icon={Server}
+            iconColor="text-sky-400"
+            iconBg="bg-sky-400/20"
+            services={coreServices}
+            isLoading={system.isLoading}
+            expandedContent={schedulerExpandedContent}
+          />
+          <HealthStatusCard
+            title="Hardware"
+            description="DAC socket and monitoring"
+            icon={Cpu}
+            iconColor="text-purple-400"
+            iconBg="bg-purple-400/20"
+            services={hardwareServices}
+            isLoading={hardware.isLoading || dacMonitor.isLoading}
+          />
+          <HealthStatusCard
+            title="Calibration"
+            description={calRunning ? 'Running…' : `${calCompleted} of 3 sensors calibrated`}
+            icon={RefreshCw}
+            iconColor="text-orange-400"
+            iconBg="bg-orange-400/20"
+            services={calibrationServices}
+            isLoading={calibrationStatus.isLoading}
+            onHeaderClick={() => setCalibrationModalOpen(true)}
+          />
+          <HealthStatusCard
+            title="Network"
+            description="Wi-Fi and internet connectivity"
+            icon={Radio}
+            iconColor="text-teal-400"
+            iconBg="bg-teal-400/20"
+            services={networkServices}
+            isLoading={wifi.isLoading}
+          />
+          <HealthStatusCard
+            title="Services"
+            description="Systemd service units"
+            icon={Cog}
+            iconColor="text-cyan-400"
+            iconBg="bg-cyan-400/20"
+            services={systemdServices}
+            isLoading={logSources.isLoading}
+          />
+        </ListSection>
 
         {/* Internet access toggle */}
         <InternetToggleCard />
 
-        {/* ── Core ── */}
-        <HealthStatusCard
-          title="Core"
-          description="Server, database, and scheduler"
-          icon={Server}
-          iconColor="text-sky-400"
-          iconBg="bg-sky-400/20"
-          services={coreServices}
-          isLoading={system.isLoading}
-          expandedContent={schedulerExpandedContent}
-        />
-
-        {/* ── Hardware ── */}
-        <HealthStatusCard
-          title="Hardware"
-          description="DAC socket and monitoring"
-          icon={Cpu}
-          iconColor="text-purple-400"
-          iconBg="bg-purple-400/20"
-          services={hardwareServices}
-          isLoading={hardware.isLoading || dacMonitor.isLoading}
-        />
-
-        {/* ── Calibration ── */}
-        <HealthStatusCard
-          title="Calibration"
-          description={calRunning ? 'Running...' : `${calCompleted}/3 sensors calibrated`}
-          icon={RefreshCw}
-          iconColor="text-orange-400"
-          iconBg="bg-orange-400/20"
-          services={calibrationServices}
-          isLoading={calibrationStatus.isLoading}
-          onHeaderClick={() => setCalibrationModalOpen(true)}
-        />
-
-        {/* ── Network ── */}
-        <HealthStatusCard
-          title="Network"
-          description="WiFi and internet connectivity"
-          icon={Radio}
-          iconColor="text-teal-400"
-          iconBg="bg-teal-400/20"
-          services={networkServices}
-          isLoading={wifi.isLoading}
-        />
-
-        {/* ── Services ── */}
-        <HealthStatusCard
-          title="Services"
-          description="Systemd service units"
-          icon={Cog}
-          iconColor="text-cyan-400"
-          iconBg="bg-cyan-400/20"
-          services={systemdServices}
-          isLoading={logSources.isLoading}
-        />
-
         {/* Software update */}
         <UpdateCard />
 
-        {/* Diagnostics console — thermal, scheduler, health, sensors, logs */}
-        <Link
-          href={`/${lang}/debug`}
-          className="flex items-center gap-3 rounded-2xl border border-zinc-800/50 bg-zinc-900/80 p-3 transition-colors hover:bg-zinc-800/60 sm:p-4"
+        {/* System info — branch/commit/build date + full disk usage */}
+        <SystemInfoCard />
+
+        {/* Tools: diagnostics console, journal logs, firmware console */}
+        <ListSection
+          header="Troubleshooting"
+          footer={system.dataUpdatedAt
+            ? `Last updated ${new Date(system.dataUpdatedAt).toLocaleTimeString()}`
+            : undefined}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-orange-400/20">
-            <Gauge size={18} className="text-orange-400" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium text-white">Diagnostics</span>
-            <span className="block text-xs text-zinc-400">Thermal delivery, scheduler, health, sensors, and logs</span>
-          </span>
-          <ChevronRight size={18} className="shrink-0 text-zinc-500" />
-        </Link>
-
-        {/* System log viewer — journalctl browser */}
-        <SystemLogViewer />
-
-        {/* Firmware Console — wrapped in a card (header is internal) */}
-        <section className="rounded-2xl border border-zinc-800/50 bg-zinc-900/80 p-3 sm:p-4">
-          <FirmwareLogConsole />
-        </section>
-
-        {system.dataUpdatedAt && (
-          <p className="text-center text-xs text-zinc-600">
-            Last updated:
-            {' '}
-            {new Date(system.dataUpdatedAt).toLocaleTimeString()}
-          </p>
-        )}
+          <ListRow
+            title="Diagnostics"
+            subtitle="Thermal delivery, scheduler, health, sensors, and logs"
+            icon={Gauge}
+            iconTile="bg-orange-500"
+            href={`/${lang}/debug`}
+          />
+          <SystemLogViewer />
+          <div>
+            <ListRow
+              title="Firmware console"
+              icon={SquareTerminal}
+              iconTile="bg-zinc-600"
+              onClick={() => setConsoleOpen(v => !v)}
+              accessory={(
+                <ChevronRight
+                  size={18}
+                  className={`shrink-0 text-zinc-600 transition-transform duration-200 ${consoleOpen ? 'rotate-90' : ''}`}
+                />
+              )}
+            />
+            {consoleOpen && (
+              <div className="border-t border-zinc-800 p-4">
+                <FirmwareLogConsole />
+              </div>
+            )}
+          </div>
+        </ListSection>
       </div>
 
-      {/* Water + Priming modal */}
+      {/* Water + Priming sheet */}
       <WaterModal open={waterModalOpen} onClose={() => setWaterModalOpen(false)} />
 
-      {/* Calibration modal */}
+      {/* Calibration sheet */}
       <CalibrationModal open={calibrationModalOpen} onClose={() => setCalibrationModalOpen(false)} />
 
     </PullToRefresh>

@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useMemo } from 'react'
 import { trpc } from '@/src/utils/trpc'
-import { X, Droplets, Play, AlertTriangle, TrendingDown, TrendingUp, Minus, Loader2 } from 'lucide-react'
+import { X, Play, AlertTriangle, TrendingDown, TrendingUp, Minus, Loader2 } from 'lucide-react'
+import { Sheet } from '@/src/ui/ios'
 
 function trendIcon(trend: string) {
   if (trend === 'declining') return <TrendingDown size={14} className="text-amber-400" />
@@ -63,45 +64,37 @@ export function WaterModal({ open, onClose }: { open: boolean, onClose: () => vo
 
   const activeAlerts = alerts ?? []
 
-  if (!open) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex flex-col">
-      <div className="flex-1 bg-black/60" onClick={onClose} />
-      <div className="flex max-h-[80dvh] flex-col rounded-t-2xl border-t border-zinc-800 bg-zinc-950">
-        {/* Drag handle */}
-        <div className="flex justify-center pt-2 pb-1">
-          <div className="h-1 w-8 rounded-full bg-zinc-700" />
-        </div>
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 pb-3">
-          <div className="flex items-center gap-2">
-            <Droplets size={16} className="text-sky-400" />
-            <span className="text-sm font-medium text-zinc-300">Water & Priming</span>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 active:text-zinc-300">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-4 pb-8 space-y-4">
-          {/* Current level */}
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Water & priming"
+      leading={<span />}
+      trailing={(
+        <button type="button" onClick={onClose} className="text-[17px] font-semibold text-sky-400 active:opacity-50">
+          Done
+        </button>
+      )}
+    >
+      <div className="space-y-6">
+        {/* Current level + trend + 7-day chart */}
+        <div className="rounded-xl bg-zinc-900 p-4">
           {isLoading
             ? (
                 <div className="flex h-16 items-center justify-center">
-                  <Loader2 size={18} className="animate-spin text-zinc-600" />
+                  <Loader2 size={20} className="animate-spin text-zinc-600" />
                 </div>
               )
             : latest
               ? (
-                  <div className="flex items-end gap-3">
+                  <div className="flex items-end justify-between gap-3">
                     <div>
-                      <p className="text-3xl font-bold tabular-nums text-white">
+                      <p className="text-[13px] text-zinc-500">Water level</p>
+                      <p className={`text-[34px] font-bold leading-[41px] ${latest.level === 'ok' ? 'text-white' : 'text-amber-400'}`}>
                         {latest.level === 'ok' ? 'OK' : 'Low'}
                       </p>
-                      <p className="text-[11px] text-zinc-500">
+                      <p className="ios-numeric text-[13px] text-zinc-500">
+                        {'Updated '}
                         {new Date(latest.timestamp).toLocaleTimeString([], {
                           hour: '2-digit',
                           minute: '2-digit',
@@ -109,9 +102,9 @@ export function WaterModal({ open, onClose }: { open: boolean, onClose: () => vo
                       </p>
                     </div>
                     {trend && (
-                      <div className="mb-1.5 flex items-center gap-1.5">
+                      <div className="mb-1 flex items-center gap-1.5">
                         {trendIcon(trend.trend)}
-                        <span className="text-xs text-zinc-500">
+                        <span className="text-[15px] text-zinc-500">
                           {trend.trend === 'stable' && 'Stable'}
                           {trend.trend === 'declining' && `Declining (${trend.lowPercent}% low)`}
                           {trend.trend === 'rising' && 'Rising'}
@@ -122,80 +115,84 @@ export function WaterModal({ open, onClose }: { open: boolean, onClose: () => vo
                   </div>
                 )
               : (
-                  <p className="text-xs text-zinc-600">No water level data</p>
+                  <p className="text-[15px] text-zinc-500">No water level data</p>
                 )}
 
-          {/* 7-day chart */}
-          <WaterLevelChart history={history} />
+          <div className="mt-4">
+            <WaterLevelChart history={history} />
+          </div>
+        </div>
 
-          {/* Active alerts */}
-          {activeAlerts.length > 0 && (
-            <div className="space-y-1.5">
+        {/* Active alerts */}
+        {activeAlerts.length > 0 && (
+          <section className="space-y-1.5">
+            <h2 className="px-4 text-[13px] text-zinc-500">Alerts</h2>
+            <div className="overflow-hidden rounded-xl bg-zinc-900 [&>*+*]:border-t [&>*+*]:border-zinc-800">
               {activeAlerts.map(alert => (
-                <div key={alert.id} className="flex items-center gap-2 rounded-lg bg-amber-900/20 px-3 py-2">
-                  <AlertTriangle size={12} className="shrink-0 text-amber-400" />
-                  <span className="flex-1 text-[11px] text-amber-300">{alert.message}</span>
+                <div key={alert.id} className="flex min-h-[44px] items-center gap-3 pl-4 pr-1">
+                  <AlertTriangle size={18} className="shrink-0 text-amber-400" />
+                  <span className="min-w-0 flex-1 py-2.5 text-[15px] text-white">{alert.message}</span>
                   <button
+                    type="button"
                     onClick={() => handleDismissAlert(alert.id)}
                     disabled={dismissAlertMutation.isPending}
-                    className="shrink-0 rounded p-1 text-zinc-500 active:bg-zinc-700"
+                    aria-label="Dismiss alert"
+                    className="grid h-11 w-11 shrink-0 place-items-center text-zinc-500 active:opacity-50"
                   >
-                    <X size={12} />
+                    <X size={18} />
                   </button>
                 </div>
               ))}
             </div>
-          )}
+          </section>
+        )}
 
-          {/* Prime controls */}
+        {/* Prime controls */}
+        <section className="space-y-1.5">
           {!showPrimeConfirm
             ? (
                 <button
+                  type="button"
                   onClick={() => setShowPrimeConfirm(true)}
-                  className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl border border-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-400 transition-colors active:bg-zinc-800"
+                  className="flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 text-[17px] text-sky-400 active:bg-zinc-800"
                 >
-                  <Play size={16} />
-                  Start Prime
+                  <Play size={18} />
+                  Start prime
                 </button>
               )
             : (
                 <div className="space-y-2">
-                  <p className="text-xs text-amber-400">
-                    Priming circulates water through the system. This takes ~5 minutes.
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleStartPrime}
-                      disabled={startPrimeMutation.isPending}
-                      className="flex flex-1 min-h-[44px] items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-medium text-white active:bg-sky-700 disabled:opacity-50"
-                    >
-                      {startPrimeMutation.isPending
-                        ? (
-                            <Loader2 size={14} className="animate-spin" />
-                          )
-                        : (
-                            <Play size={14} />
-                          )}
-                      Confirm Prime
-                    </button>
-                    <button
-                      onClick={() => setShowPrimeConfirm(false)}
-                      className="rounded-xl border border-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-400 active:bg-zinc-800"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleStartPrime}
+                    disabled={startPrimeMutation.isPending}
+                    className="flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-sky-500 text-[17px] font-semibold text-white active:opacity-80 disabled:opacity-50"
+                  >
+                    {startPrimeMutation.isPending
+                      ? <Loader2 size={18} className="animate-spin" />
+                      : <Play size={18} />}
+                    Confirm prime
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPrimeConfirm(false)}
+                    className="h-[44px] w-full text-[17px] text-sky-400 active:opacity-50"
+                  >
+                    Cancel
+                  </button>
                 </div>
               )}
-
+          <p className="px-4 text-[13px] leading-[18px] text-zinc-500">
+            Priming circulates water through the system. It takes about 5 minutes.
+          </p>
           {startPrimeMutation.isError && (
-            <p className="text-[10px] text-red-400">
+            <p className="px-4 text-[13px] text-red-400">
               {startPrimeMutation.error?.message ?? 'Failed to start prime'}
             </p>
           )}
-        </div>
+        </section>
       </div>
-    </div>
+    </Sheet>
   )
 }
 
@@ -252,21 +249,21 @@ function WaterLevelChart({ history }: { history?: { timestamp: Date, level: stri
   const areaD = `${pathD} L${toX(points[points.length - 1].ts).toFixed(1)},${H} L${toX(points[0].ts).toFixed(1)},${H} Z`
 
   const lastLevel = points[points.length - 1].level
-  const color = lastLevel <= 30 ? '#f87171' : lastLevel <= 50 ? '#fbbf24' : '#38bdf8'
+  const color = lastLevel <= 30 ? '#FF9F0A' : '#0A84FF'
 
   return (
     <div className="relative">
-      <svg viewBox={`0 0 ${W} ${H + 14}`} className="w-full h-auto" preserveAspectRatio="none">
+      <svg viewBox={`0 0 ${W} ${H + 18}`} className="h-auto w-full">
         <defs>
           <linearGradient id="waterModalFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+            <stop offset="0%" stopColor={color} stopOpacity="0.15" />
             <stop offset="100%" stopColor={color} stopOpacity="0.02" />
           </linearGradient>
         </defs>
         <path d={areaD} fill="url(#waterModalFill)" />
         <path d={pathD} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
         {dayLabels.map((d, i) => (
-          <text key={i} x={d.x} y={H + 11} fill="#666" fontSize="8" textAnchor="start">
+          <text key={i} x={d.x} y={H + 14} fill="#8E8E93" fontSize="11" textAnchor="start">
             {d.label}
           </text>
         ))}

@@ -1,7 +1,7 @@
 'use client'
 
 import { trpc } from '@/src/utils/trpc'
-import { HardDrive, GitBranch, GitCommit, Calendar } from 'lucide-react'
+import { Archive, Calendar, GitBranch, GitCommit, HardDrive, Loader2 } from 'lucide-react'
 
 /**
  * SystemInfoCard — firmware/build version + per-mount storage breakdown.
@@ -24,77 +24,69 @@ export function SystemInfoCard() {
   const storageData = storage.data
 
   return (
-    <div className="rounded-2xl bg-zinc-900/80 p-3 sm:p-4">
-      <div className="mb-2 flex items-center gap-2 sm:mb-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/20">
-          <HardDrive size={14} className="text-sky-400" />
-        </div>
-        <h3 className="text-sm font-medium text-white">System Info</h3>
+    <section className="space-y-1.5">
+      <h2 className="px-4 text-[13px] leading-[18px] text-zinc-500">System info</h2>
+      <div className="overflow-hidden rounded-xl bg-zinc-900 [&>*+*]:border-t [&>*+*]:border-zinc-800">
+        {isLoading
+          ? (
+              <div className="flex min-h-[44px] items-center gap-3 px-4">
+                <Loader2 size={18} className="animate-spin text-zinc-500" />
+                <span className="text-[15px] text-zinc-500">Loading system info…</span>
+              </div>
+            )
+          : (
+              <>
+                {versionData && (
+                  <>
+                    <InfoRow
+                      icon={<GitBranch size={18} />}
+                      label="Branch"
+                      value={versionData.branch}
+                    />
+                    <InfoRow
+                      icon={<GitCommit size={18} />}
+                      label="Commit"
+                      value={versionData.commitHash !== 'unknown' ? versionData.commitHash.slice(0, 7) : 'unknown'}
+                      subValue={versionData.commitTitle !== 'unknown' ? versionData.commitTitle : undefined}
+                    />
+                    <InfoRow
+                      icon={<Calendar size={18} />}
+                      label="Build date"
+                      value={versionData.buildDate !== 'unknown' ? formatBuildDate(versionData.buildDate) : 'unknown'}
+                    />
+                  </>
+                )}
+
+                {storageData && storageData.emmc.totalBytes > 0 && (
+                  <DiskSection
+                    label="eMMC"
+                    sublabel="/persistent"
+                    totalBytes={storageData.emmc.totalBytes}
+                    usedBytes={storageData.emmc.usedBytes}
+                    availableBytes={storageData.emmc.availableBytes}
+                    usedPercent={storageData.emmc.usedPercent}
+                  />
+                )}
+                {storageData && storageData.biometricsTmpfs.totalBytes > 0 && (
+                  <DiskSection
+                    label="Biometrics tmpfs"
+                    sublabel="/persistent/biometrics"
+                    totalBytes={storageData.biometricsTmpfs.totalBytes}
+                    usedBytes={storageData.biometricsTmpfs.usedBytes}
+                    availableBytes={storageData.biometricsTmpfs.availableBytes}
+                    usedPercent={storageData.biometricsTmpfs.usedPercent}
+                  />
+                )}
+                {storageData && storageData.biometricsArchive.usedBytes > 0 && (
+                  <ArchiveSection
+                    usedBytes={storageData.biometricsArchive.usedBytes}
+                    fileCount={storageData.biometricsArchive.fileCount}
+                  />
+                )}
+              </>
+            )}
       </div>
-
-      {isLoading
-        ? (
-            <div className="flex items-center gap-2 py-4">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-600 border-t-sky-400" />
-              <span className="text-xs text-zinc-500">Loading system info...</span>
-            </div>
-          )
-        : (
-            <div className="space-y-3">
-              {versionData && (
-                <div className="space-y-2">
-                  <InfoRow
-                    icon={<GitBranch size={12} />}
-                    label="Branch"
-                    value={versionData.branch}
-                  />
-                  <InfoRow
-                    icon={<GitCommit size={12} />}
-                    label="Commit"
-                    value={versionData.commitHash !== 'unknown' ? versionData.commitHash.slice(0, 7) : 'unknown'}
-                    subValue={versionData.commitTitle !== 'unknown' ? versionData.commitTitle : undefined}
-                  />
-                  <InfoRow
-                    icon={<Calendar size={12} />}
-                    label="Build Date"
-                    value={versionData.buildDate !== 'unknown' ? formatBuildDate(versionData.buildDate) : 'unknown'}
-                  />
-                </div>
-              )}
-
-              {storageData && (
-                <div className="space-y-3 border-t border-zinc-800 pt-3">
-                  {storageData.emmc.totalBytes > 0 && (
-                    <DiskSection
-                      label="eMMC"
-                      sublabel="/persistent"
-                      totalBytes={storageData.emmc.totalBytes}
-                      usedBytes={storageData.emmc.usedBytes}
-                      availableBytes={storageData.emmc.availableBytes}
-                      usedPercent={storageData.emmc.usedPercent}
-                    />
-                  )}
-                  {storageData.biometricsTmpfs.totalBytes > 0 && (
-                    <DiskSection
-                      label="Biometrics tmpfs"
-                      sublabel="/persistent/biometrics"
-                      totalBytes={storageData.biometricsTmpfs.totalBytes}
-                      usedBytes={storageData.biometricsTmpfs.usedBytes}
-                      availableBytes={storageData.biometricsTmpfs.availableBytes}
-                      usedPercent={storageData.biometricsTmpfs.usedPercent}
-                    />
-                  )}
-                  {storageData.biometricsArchive.usedBytes > 0 && (
-                    <ArchiveSection
-                      usedBytes={storageData.biometricsArchive.usedBytes}
-                      fileCount={storageData.biometricsArchive.fileCount}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-    </div>
+    </section>
   )
 }
 
@@ -121,33 +113,34 @@ function DiskSection({
         : 'bg-sky-500'
 
   return (
-    <div>
-      <div className="mb-1 flex items-baseline justify-between gap-2">
-        <div className="flex items-baseline gap-2">
-          <span className="text-xs text-zinc-400">{label}</span>
-          <span className="font-mono text-[10px] text-zinc-600">{sublabel}</span>
+    <div className="flex items-start gap-3 px-4 py-3">
+      <HardDrive size={18} className="mt-0.5 shrink-0 text-zinc-500" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-[17px] leading-[22px] text-white">{label}</span>
+          <span className="ios-numeric shrink-0 text-[15px] text-zinc-500">
+            {formatBytes(usedBytes)}
+            {' of '}
+            {formatBytes(totalBytes)}
+          </span>
         </div>
-        <span className="text-xs tabular-nums text-zinc-400">
-          {formatBytes(usedBytes)}
-          {' / '}
-          {formatBytes(totalBytes)}
-        </span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className={`h-full rounded-full transition-all ${barColor}`}
-          style={{ width: `${Math.min(usedPercent, 100)}%` }}
-        />
-      </div>
-      <div className="mt-1 flex justify-between">
-        <span className="text-[10px] text-zinc-600">
-          {usedPercent.toFixed(1)}
-          % used
-        </span>
-        <span className="text-[10px] text-zinc-600">
-          {formatBytes(availableBytes)}
-          {' free'}
-        </span>
+        <p className="truncate font-mono text-[12px] leading-[18px] text-zinc-600">{sublabel}</p>
+        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className={`h-full rounded-full transition-all ${barColor}`}
+            style={{ width: `${Math.min(usedPercent, 100)}%` }}
+          />
+        </div>
+        <div className="ios-numeric mt-1 flex justify-between text-[13px] text-zinc-500">
+          <span>
+            {usedPercent.toFixed(1)}
+            % used
+          </span>
+          <span>
+            {formatBytes(availableBytes)}
+            {' free'}
+          </span>
+        </div>
       </div>
     </div>
   )
@@ -155,22 +148,21 @@ function DiskSection({
 
 function ArchiveSection({ usedBytes, fileCount }: { usedBytes: number, fileCount: number }) {
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="flex items-baseline gap-2">
-          <span className="text-xs text-zinc-400">Biometrics archive</span>
-          <span className="font-mono text-[10px] text-zinc-600">/persistent/biometrics-archive</span>
+    <div className="flex items-start gap-3 px-4 py-3">
+      <Archive size={18} className="mt-0.5 shrink-0 text-zinc-500" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-[17px] leading-[22px] text-white">Biometrics archive</span>
+          <span className="ios-numeric shrink-0 text-[15px] text-zinc-500">{formatBytes(usedBytes)}</span>
         </div>
-        <span className="text-xs tabular-nums text-zinc-400">
-          {formatBytes(usedBytes)}
-        </span>
+        <p className="truncate font-mono text-[12px] leading-[18px] text-zinc-600">/persistent/biometrics-archive</p>
+        <p className="text-[13px] text-zinc-500">
+          {fileCount}
+          {' '}
+          gzipped session
+          {fileCount === 1 ? '' : 's'}
+        </p>
       </div>
-      <p className="mt-0.5 text-[10px] text-zinc-600">
-        {fileCount}
-        {' '}
-        gzipped session
-        {fileCount === 1 ? '' : 's'}
-      </p>
     </div>
   )
 }
@@ -187,17 +179,15 @@ function InfoRow({
   subValue?: string
 }) {
   return (
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5 text-zinc-500">{icon}</span>
+    <div className="flex min-h-[44px] items-center gap-3 px-4 py-2.5">
+      <span className="shrink-0 text-zinc-500">{icon}</span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-xs text-zinc-500">{label}</span>
-          <span className="truncate text-xs font-medium tabular-nums text-zinc-300">
-            {value}
-          </span>
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="shrink-0 text-[17px] leading-[22px] text-white">{label}</span>
+          <span className="ios-numeric truncate text-[17px] text-zinc-500">{value}</span>
         </div>
         {subValue && (
-          <p className="mt-0.5 truncate text-[10px] text-zinc-600">{subValue}</p>
+          <p className="truncate text-[13px] leading-[18px] text-zinc-500">{subValue}</p>
         )}
       </div>
     </div>
