@@ -34,8 +34,17 @@ export default async function LangLayout({
     <html lang={lang} className="dark">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-        <meta name="theme-color" content="#0a0a0a" />
+        <meta name="theme-color" content="#000000" />
         <meta name="color-scheme" content="dark" />
+        <title>sleepypod</title>
+        {/* Home-screen install on iOS: standalone window, translucent status bar, app icon */}
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
+        <link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192" />
+        <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="sleepypod" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body>
         <TRPCProvider>

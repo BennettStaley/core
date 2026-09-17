@@ -19,19 +19,16 @@ const getRequestLocale = (requestHeaders: Headers): string => {
 export const proxy = (request: NextRequest) => {
   const { pathname } = request.nextUrl
 
-  console.log('Current pathname:', pathname)
   const pathnameHasLocale = locales.some(
     (locale: string) => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`,
   )
 
-  console.log('Pathname has locale:', pathnameHasLocale)
   if (pathnameHasLocale) {
     return
   }
 
   // Redirect if there is no locale
   const locale = getRequestLocale(request.headers)
-  console.log('Redirecting to locale:', locale) // Debugging: Log the locale being redirected to
 
   request.nextUrl.pathname = `/${locale}${pathname}`
 
@@ -41,8 +38,10 @@ export const proxy = (request: NextRequest) => {
 // Routes excluded from locale redirect:
 //   api    — tRPC + REST endpoints, no locale needed
 //   panel  — tRPC panel dev tool, served as a plain route handler
+//   static — icons, favicon and the web app manifest (redirecting them to
+//            /en/... 404s and breaks iOS home-screen install)
 export const config = {
   matcher: [
-    '/((?!api|panel(?:/|$)|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|panel(?:/|$)|_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)',
   ],
 }

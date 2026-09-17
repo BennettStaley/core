@@ -4,10 +4,13 @@
   align-items: center;
   width: 100%;
   padding: 8px 12px;
+  /* Standalone iOS uses a translucent status bar — keep the header below it */
+  padding-top: max(8px, env(safe-area-inset-top, 0px));
 }
 
 @media (min-width: 375px) {
   .header {
     padding: 12px 24px;
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
   }
 }
