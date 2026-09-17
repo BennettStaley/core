@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -165,5 +165,65 @@ wan_is_effectively_blocked
     })
 
     expect(result.status).toBe(0)
+  })
+})
+
+describe('extra trusted LAN CIDRs (non-RFC1918 home networks)', () => {
+  function runBlockWan(cidrsFile: string, failOn?: string) {
+    const dir = mkdtempSync(join(tmpdir(), 'sleepypod-iptables-'))
+    tempDirs.push(dir)
+    const commandLog = join(dir, 'iptables.commands')
+    const cidrsPath = join(dir, 'lan-cidrs')
+    writeFileSync(cidrsPath, cidrsFile)
+    const harness = `
+iptables() {
+  printf '%s\\n' "$*" >> "$COMMAND_LOG"
+  if [ "$1" = '-C' ]; then return 1; fi
+  if [ "$1" = '-S' ] && [ "$2" = 'OUTPUT' ]; then printf '%s\\n' '-P OUTPUT DROP' '-A OUTPUT -j DROP'; fi
+  if [ -n "$FAIL_ON" ] && [ "$*" = "$FAIL_ON" ]; then return 1; fi
+  return 0
+}
+source "$HELPER_PATH"
+block_wan
+`
+    const result = spawnSync('bash', ['-c', harness], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        COMMAND_LOG: commandLog,
+        HELPER_PATH: helperPath,
+        TRUSTED_LAN_CIDRS_FILE: cidrsPath,
+        FAIL_ON: failOn ?? '',
+      },
+    })
+    return { result, commands: readFileSync(commandLog, 'utf8').trim().split('\n') }
+  }
+
+  it('allows valid extra CIDRs before the final DROP and ignores junk or blanket ranges', () => {
+    const { result, commands } = runBlockWan('# home LAN\n13.0.0.0/24\n\nnot-a-cidr\n0.0.0.0/0\n1.2.3.4/4\n')
+
+    expect(result.status).toBe(0)
+    const inputAllow = commands.indexOf('-I INPUT 1 -s 13.0.0.0/24 -j ACCEPT')
+    expect(inputAllow).toBeGreaterThan(-1)
+    expect(commands).toContain('-I OUTPUT 1 -d 13.0.0.0/24 -j ACCEPT')
+    expect(inputAllow).toBeLessThan(commands.indexOf('-A INPUT -j DROP'))
+    expect(commands.some(command => command.includes('0.0.0.0/0'))).toBe(false)
+    expect(commands.some(command => command.includes('1.2.3.4/4'))).toBe(false)
+  })
+
+  it('keeps the extra CIDR allowed even when the rebuild fails midway', () => {
+    const { result, commands } = runBlockWan('13.0.0.0/24\n', '-I OUTPUT -p udp --dport 123 -j ACCEPT')
+
+    expect(result.status).not.toBe(0)
+    expect(commands).toContain('-I INPUT 1 -s 13.0.0.0/24 -j ACCEPT')
+  })
+
+  it('ships the same allow hook in every firewall fallback path', () => {
+    for (const script of [helperScript, installScript]) {
+      expect(script).toContain('allow_extra_lan_cidrs() {')
+      expect(script).toMatch(/allow_extra_lan_cidrs \|\| return 1\n\n {2}# Allow established connections/)
+    }
+    expect(installScript).toMatch(/forcing default policies DROP\." >&2\n\s+allow_extra_lan_cidrs/)
+    expect(updateScript.match(/declare -F allow_extra_lan_cidrs/g)).toHaveLength(2)
   })
 })
