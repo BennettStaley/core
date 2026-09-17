@@ -2,9 +2,10 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { Droplets, Minus, TrendingDown, TrendingUp } from 'lucide-react'
+import { PauseCircle } from 'lucide-react'
 import { useSensorStream } from '@/src/hooks/useSensorStream'
 import { trpc } from '@/src/utils/trpc'
+import { PageHeader } from '@/src/ui/ios'
 import { PullToRefresh } from '@/src/components/PullToRefresh/PullToRefresh'
 import { TimeRangeSelector, getDateRangeFromTimeRange, type TimeRange } from '@/src/components/Environment/TimeRangeSelector'
 import { BedTempChart } from '@/src/components/Environment/BedTempChart'
@@ -15,23 +16,30 @@ import { BedTempMatrix } from './BedTempMatrix'
 import { FreezerHealthCard } from './FreezerHealthCard'
 import { FlowrateChart } from './FlowrateChart'
 import { PiezoWaveform } from './PiezoWaveform'
+import { CardTitle } from './CardTitle'
 
 const DataPipeline = dynamic(() => import('./DataPipeline').then(m => ({ default: m.DataPipeline })), {
   ssr: false,
-  loading: () => <div className="flex h-[400px] items-center justify-center text-xs text-zinc-600">Loading pipeline...</div>,
+  loading: () => <div className="flex h-[400px] items-center justify-center text-[15px] text-zinc-500">Loading pipeline…</div>,
 })
+
+interface SensorsScreenProps {
+  /**
+   * Render the iOS large-title header with the Live/Stop bar button (the
+   * /sensors tab). The desktop diagnostics console embeds the screen without it.
+   */
+  header?: boolean
+}
 
 /**
  * Main Sensors screen composition.
  * Connects to the WebSocket sensor stream and renders all live sensor
- * data panels: connection bar, sensor matrix (bed temp), presence with
- * zone activity, piezo waveform, bed temp trend (recharts), humidity (recharts),
- * movement, and system health.
+ * data panels: connection status, data pipeline, piezo waveform, presence,
+ * sensor matrix (bed temp), bed temp trend, humidity, system health and flow.
  *
  * Pull-to-refresh reconnects the WebSocket stream.
- * Matches iOS BedSensorScreen layout and functionality.
  */
-export function SensorsScreen() {
+export function SensorsScreen({ header = false }: SensorsScreenProps) {
   const [streamEnabled, setStreamEnabled] = useState(true)
   const [timeRange, setTimeRange] = useState<TimeRange>('6h')
 
@@ -74,24 +82,6 @@ export function SensorsScreen() {
 
   const summary = summaryQuery.data?.bedTemp
 
-  // Determine ambient trend
-  const latestQuery = trpc.environment.getLatestBedTemp.useQuery(
-    { unit: 'F' },
-    { refetchInterval: 30_000, staleTime: 15_000 },
-  )
-  const latest = latestQuery.data
-
-  const ambientTrend = useMemo(() => {
-    if (!summary?.minAmbientTemp || !summary?.maxAmbientTemp) return null
-    const range = summary.maxAmbientTemp - summary.minAmbientTemp
-    if (range < 1) return 'stable'
-    if (latest?.ambientTemp != null) {
-      const mid = (summary.minAmbientTemp + summary.maxAmbientTemp) / 2
-      return latest.ambientTemp > mid ? 'warming' : 'cooling'
-    }
-    return null
-  }, [summary, latest])
-
   /** Pull-to-refresh: toggle stream off/on to force reconnect. */
   const handleRefresh = useCallback(async () => {
     setStreamEnabled(false)
@@ -99,76 +89,93 @@ export function SensorsScreen() {
     setStreamEnabled(true)
   }, [])
 
+  const toggleStream = () => setStreamEnabled(v => !v)
+
+  const status = streamEnabled
+    ? (
+        <ConnectionStatusBar
+          variant={header ? 'inline' : 'bar'}
+          status={stream.status}
+          fps={stream.fps}
+          lastError={stream.lastError}
+          subscribedSensors={stream.subscribedSensors}
+          lastFrameTime={stream.lastFrameTime}
+        />
+      )
+    : null
+
   return (
     <PullToRefresh onRefresh={handleRefresh} enabled={streamEnabled}>
-      <div className="-mt-1 space-y-3 pb-4">
-        {/* Connection status bar + stream toggle */}
-        <div className="flex items-center gap-2">
-          <div className="flex-1">
-            <ConnectionStatusBar
-              status={stream.status}
-              fps={stream.fps}
-              lastError={stream.lastError}
-              subscribedSensors={stream.subscribedSensors}
-              lastFrameTime={stream.lastFrameTime}
-            />
-          </div>
-          <button
-            onClick={() => setStreamEnabled(v => !v)}
-            className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
-              streamEnabled
-                ? 'bg-red-900/30 text-red-400 active:bg-red-900/50'
-                : 'bg-emerald-900/30 text-emerald-400 active:bg-emerald-900/50'
-            }`}
-          >
-            {streamEnabled ? 'Stop' : 'Start'}
-          </button>
-        </div>
+      <div className="space-y-4 pb-4">
+        {header
+          ? (
+              <div className="space-y-1">
+                <PageHeader
+                  title="Sensors"
+                  trailing={(
+                    <button
+                      type="button"
+                      onClick={toggleStream}
+                      className="-mr-2 min-h-[44px] px-2 text-[17px] text-sky-400 active:opacity-50"
+                    >
+                      {streamEnabled ? 'Stop' : 'Start'}
+                    </button>
+                  )}
+                />
+                <div className="px-1">
+                  {status ?? <span className="text-[15px] text-zinc-500">Paused</span>}
+                </div>
+              </div>
+            )
+          : (
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  {status ?? (
+                    <div className="flex min-h-[44px] items-center rounded-xl bg-zinc-900 px-4 text-[15px] text-zinc-500">Paused</div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleStream}
+                  className="min-h-[44px] shrink-0 rounded-xl bg-zinc-900 px-4 text-[17px] text-sky-400 active:bg-zinc-800"
+                >
+                  {streamEnabled ? 'Stop' : 'Start'}
+                </button>
+              </div>
+            )}
 
         {/* Paused state */}
         {!streamEnabled && (
-          <div className="flex h-32 items-center justify-center rounded-2xl bg-zinc-900">
-            <div className="text-center">
-              <p className="text-sm text-zinc-400">Stream paused</p>
-              <p className="text-xs text-zinc-600">Tap Start to resume live data</p>
-            </div>
-          </div>
+          <section className="flex flex-col items-center gap-2 rounded-xl bg-zinc-900 px-4 py-10 text-center">
+            <PauseCircle size={32} strokeWidth={1.5} className="text-zinc-600" />
+            <p className="text-[17px] font-semibold text-white">Stream paused</p>
+            <p className="text-[15px] text-zinc-500">Tap Start to resume live data.</p>
+          </section>
         )}
 
         {streamEnabled && (
           <>
-            {/* Data Pipeline — static DAG + live canvas timeline */}
             <SensorCard>
               <DataPipeline />
             </SensorCard>
 
-            {/* Piezo Waveform — real-time BCG signal */}
             <SensorCard>
               <PiezoWaveform />
             </SensorCard>
 
-            {/* Bed Presence — capacitive sensing with zone activity */}
             <SensorCard>
               <PresenceCard />
             </SensorCard>
 
-            {/* Sensor Matrix — Bed Temperature Grid */}
             <SensorCard>
               <BedTempMatrix />
             </SensorCard>
 
-            {/* Bed Temperature Trend — recharts LineChart (from biometrics) */}
+            {/* Bed temperature trend — recharts LineChart (from biometrics) */}
             <SensorCard>
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <TrendIcon trend={ambientTrend} />
-                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                      Bed Temperature Trend
-                    </h3>
-                  </div>
-                  <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
-                </div>
+                <CardTitle title="Bed temperature" />
+                <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
 
                 {bedTempQuery.isLoading
                   ? (
@@ -178,8 +185,8 @@ export function SensorsScreen() {
                     )
                   : bedTempQuery.isError
                     ? (
-                        <div className="flex h-[200px] items-center justify-center text-sm text-red-400">
-                          Failed to load temperature data
+                        <div className="flex h-[200px] items-center justify-center text-[15px] text-zinc-500">
+                          Couldn’t load temperature data
                         </div>
                       )
                     : (
@@ -191,19 +198,18 @@ export function SensorsScreen() {
                         />
                       )}
 
-                {/* Summary stats */}
                 {summary && (
-                  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-zinc-800 pt-2">
+                  <div className="grid grid-cols-4 gap-2 border-t border-zinc-800 pt-3">
                     <SummaryItem
-                      label="Avg Bed L"
+                      label="Left"
                       value={summary.avgLeftCenterTemp != null ? `${Math.round(summary.avgLeftCenterTemp)}°` : '--'}
                     />
                     <SummaryItem
-                      label="Avg Bed R"
+                      label="Right"
                       value={summary.avgRightCenterTemp != null ? `${Math.round(summary.avgRightCenterTemp)}°` : '--'}
                     />
                     <SummaryItem
-                      label="Avg Ambient"
+                      label="Ambient"
                       value={summary.avgAmbientTemp != null ? `${Math.round(summary.avgAmbientTemp)}°` : '--'}
                     />
                     <SummaryItem
@@ -215,15 +221,10 @@ export function SensorsScreen() {
               </div>
             </SensorCard>
 
-            {/* Humidity Trend — recharts AreaChart (from biometrics) */}
+            {/* Humidity trend — recharts AreaChart (from biometrics) */}
             <SensorCard>
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <Droplets size={10} className="text-[#4a90d9]" />
-                  <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Humidity
-                  </h3>
-                </div>
+              <div className="space-y-3">
+                <CardTitle title="Humidity" meta={timeRange} />
                 {bedTempQuery.isLoading
                   ? (
                       <div className="flex h-[140px] items-center justify-center">
@@ -236,12 +237,10 @@ export function SensorsScreen() {
               </div>
             </SensorCard>
 
-            {/* System — freezer thermal health */}
             <SensorCard>
               <FreezerHealthCard />
             </SensorCard>
 
-            {/* Flowrate + Pump RPM trend (from biometrics) */}
             <SensorCard>
               <FlowrateChart />
             </SensorCard>
@@ -252,27 +251,20 @@ export function SensorsScreen() {
   )
 }
 
-/** Consistent card wrapper matching iOS cardStyle(). */
+/** Grouped surface for a sensor panel. */
 function SensorCard({ children }: { children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-zinc-800/50 bg-zinc-900 p-2 sm:p-3">
+    <section className="rounded-xl bg-zinc-900 p-4">
       {children}
     </section>
   )
 }
 
-function TrendIcon({ trend }: { trend: string | null }) {
-  if (trend === 'warming') return <TrendingUp size={10} className="text-[#d4a84a]" />
-  if (trend === 'cooling') return <TrendingDown size={10} className="text-[#4a90d9]" />
-  return <Minus size={10} className="text-zinc-500" />
-}
-
 function SummaryItem({ label, value }: { label: string, value: string }) {
   return (
     <div className="flex flex-col items-center">
-      <span className="text-xs font-medium tabular-nums text-zinc-300">{value}</span>
-      <span className="text-[9px] text-zinc-600">{label}</span>
+      <span className="ios-numeric text-[17px] font-semibold text-white">{value}</span>
+      <span className="text-[13px] text-zinc-500">{label}</span>
     </div>
   )
 }
-

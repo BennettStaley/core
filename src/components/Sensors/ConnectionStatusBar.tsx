@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import clsx from 'clsx'
 import { type ConnectionStatus } from '@/src/hooks/useSensorStream'
 import { Loader2 } from 'lucide-react'
 
@@ -10,43 +11,18 @@ interface ConnectionStatusBarProps {
   lastError: string | null
   subscribedSensors: string[] | null
   lastFrameTime: number | null
+  /**
+   * `bar` renders a grouped row (desktop console); `inline` renders a quiet
+   * caption line suitable for sitting under a large title.
+   */
+  variant?: 'bar' | 'inline'
 }
 
-const STATUS_CONFIG: Record<ConnectionStatus, {
-  label: string
-  color: string
-  bg: string
-  dotColor: string
-  borderColor: string
-}> = {
-  connected: {
-    label: 'Live',
-    color: 'text-emerald-400',
-    bg: 'bg-[#0a0a14]',
-    dotColor: 'bg-emerald-400',
-    borderColor: 'border-emerald-400/20',
-  },
-  connecting: {
-    label: 'Connecting',
-    color: 'text-amber-400',
-    bg: 'bg-[#0a0a14]',
-    dotColor: 'bg-amber-400',
-    borderColor: 'border-amber-400/20',
-  },
-  reconnecting: {
-    label: 'Reconnecting',
-    color: 'text-amber-400',
-    bg: 'bg-[#0a0a14]',
-    dotColor: 'bg-amber-400',
-    borderColor: 'border-amber-400/20',
-  },
-  disconnected: {
-    label: 'Disconnected',
-    color: 'text-red-400',
-    bg: 'bg-[#0a0a14]',
-    dotColor: 'bg-red-400',
-    borderColor: 'border-red-400/20',
-  },
+const STATUS_CONFIG: Record<ConnectionStatus, { label: string, color: string, dotColor: string }> = {
+  connected: { label: 'Live', color: 'text-emerald-400', dotColor: 'bg-emerald-400' },
+  connecting: { label: 'Connecting', color: 'text-amber-400', dotColor: 'bg-amber-400' },
+  reconnecting: { label: 'Reconnecting', color: 'text-amber-400', dotColor: 'bg-amber-400' },
+  disconnected: { label: 'Offline', color: 'text-zinc-400', dotColor: 'bg-zinc-500' },
 }
 
 /** Format relative time ago string. */
@@ -77,8 +53,8 @@ function useRelativeTime(timestamp: number | null): string {
 }
 
 /**
- * Connection status indicator bar matching iOS BedSensorScreen connectionBar.
- * Shows live pulse dot, status label, FPS counter, and relative time.
+ * Stream connection indicator: status dot + label, followed by quiet meta
+ * (subscribed sensor count, fps, time since last frame).
  */
 export function ConnectionStatusBar({
   status,
@@ -86,61 +62,40 @@ export function ConnectionStatusBar({
   lastError,
   subscribedSensors,
   lastFrameTime,
+  variant = 'bar',
 }: ConnectionStatusBarProps) {
   const config = STATUS_CONFIG[status]
   const isConnected = status === 'connected'
   const isLoading = status === 'connecting' || status === 'reconnecting'
   const relativeTime = useRelativeTime(lastFrameTime)
 
-  return (
-    <div className={`flex items-center justify-between rounded-xl border ${config.borderColor} ${config.bg} px-3 py-2`}>
-      <div className="flex items-center gap-2">
-        {/* Live pulse dot */}
-        {isLoading
-          ? (
-              <Loader2 size={12} className={`animate-spin ${config.color}`} />
-            )
-          : (
-              <span className="relative flex h-[7px] w-[7px]">
-                {isConnected && (
-                  <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${config.dotColor} opacity-60`} />
-                )}
-                <span className={`relative inline-flex h-[7px] w-[7px] rounded-full ${config.dotColor}`} />
-              </span>
-            )}
+  const meta = [
+    subscribedSensors ? `${subscribedSensors.length} sensors` : null,
+    isConnected && fps > 0 ? `${fps} fps` : null,
+    relativeTime || null,
+  ].filter(Boolean)
 
-        {/* Status label */}
-        <span className={`text-xs font-semibold ${config.color}`}>
+  return (
+    <div
+      className={clsx(
+        'flex min-w-0 items-center gap-2',
+        variant === 'bar' && 'min-h-[44px] rounded-xl bg-zinc-900 px-4',
+      )}
+    >
+      {isLoading
+        ? <Loader2 size={12} className={`shrink-0 animate-spin ${config.color}`} />
+        : <span className={`h-2 w-2 shrink-0 rounded-full ${config.dotColor}`} />}
+      <span className="ios-numeric min-w-0 truncate text-[15px] text-zinc-500">
+        <span className={clsx('font-medium', isConnected ? 'text-emerald-400' : 'text-zinc-300')}>
           {lastError && !isConnected ? lastError : config.label}
         </span>
-      </div>
-
-      <div className="flex items-center gap-3">
-        {/* Subscribed sensor count */}
-        {subscribedSensors && (
-          <span className="text-[9px] text-zinc-600">
-            {subscribedSensors.length}
-            {' '}
-            sensors
+        {meta.map(m => (
+          <span key={m}>
+            {' · '}
+            {m}
           </span>
-        )}
-
-        {/* FPS counter */}
-        {isConnected && fps > 0 && (
-          <span className="font-mono text-[9px] text-zinc-500">
-            {fps}
-            {' '}
-            fps
-          </span>
-        )}
-
-        {/* Relative time since last frame */}
-        {relativeTime && (
-          <span className="text-[9px] text-zinc-600">
-            {relativeTime}
-          </span>
-        )}
-      </div>
+        ))}
+      </span>
     </div>
   )
 }

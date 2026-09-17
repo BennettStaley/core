@@ -4,7 +4,8 @@ import { useCallback, useState } from 'react'
 import { useSensorFrame, useOnSensorFrame } from '@/src/hooks/useSensorStream'
 import type { CapSenseFrame, CapSense2Frame, SensorFrame } from '@/src/hooks/useSensorStream'
 import { trpc } from '@/src/utils/trpc'
-import { Brain, PersonStanding, Footprints } from 'lucide-react'
+import { Brain, PersonStanding, Footprints, User } from 'lucide-react'
+import { CardTitle, EmptyState, LEFT_COLOR, RIGHT_COLOR } from './CardTitle'
 
 /**
  * Bed presence card.
@@ -56,45 +57,37 @@ function ZoneActivityRow({ zone, label, icon, leftVariance, rightVariance }: Zon
   const rightPct = Math.min(rightVar / ACTIVITY_NORMALIZE, 1)
 
   return (
-    <div className="flex h-5 items-center gap-0">
+    <div className="flex h-7 items-center gap-2">
       {/* Left activity bar — grows from right to left */}
-      <div className="relative flex-1 h-full">
-        <div className="absolute inset-0 rounded-sm bg-zinc-800/30" />
+      <div className="relative h-full flex-1 overflow-hidden rounded-md bg-zinc-800">
         <div
-          className="absolute inset-y-0 right-0 rounded-sm transition-all duration-300"
+          className="absolute inset-y-0 right-0 transition-all duration-300"
           style={{
             width: `${leftPct * 100}%`,
-            backgroundColor: `rgba(74, 158, 255, ${leftPct > 0.05 ? 0.2 + leftPct * 0.6 : 0.03})`,
+            backgroundColor: `rgba(10, 132, 255, ${leftPct > 0.05 ? 0.25 + leftPct * 0.55 : 0})`,
           }}
         />
-        <span className={`absolute left-1 top-1/2 -translate-y-1/2 font-mono text-[7px] ${
-          leftPct > 0.1 ? 'text-[#4a9eff]' : 'text-zinc-600'
-        }`}
-        >
+        <span className="ios-numeric absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400">
           {leftVar.toFixed(2)}
         </span>
       </div>
 
       {/* Center label */}
-      <div className="flex w-9 flex-col items-center justify-center">
-        <span className="text-zinc-500">{icon}</span>
-        <span className="text-[7px] font-semibold text-zinc-500">{label}</span>
+      <div className="flex w-16 items-center justify-center gap-1 text-zinc-500">
+        {icon}
+        <span className="text-[13px]">{label}</span>
       </div>
 
       {/* Right activity bar — grows from left to right */}
-      <div className="relative flex-1 h-full">
-        <div className="absolute inset-0 rounded-sm bg-zinc-800/30" />
+      <div className="relative h-full flex-1 overflow-hidden rounded-md bg-zinc-800">
         <div
-          className="absolute inset-y-0 left-0 rounded-sm transition-all duration-300"
+          className="absolute inset-y-0 left-0 transition-all duration-300"
           style={{
             width: `${rightPct * 100}%`,
-            backgroundColor: `rgba(64, 224, 208, ${rightPct > 0.05 ? 0.2 + rightPct * 0.6 : 0.03})`,
+            backgroundColor: `rgba(64, 200, 224, ${rightPct > 0.05 ? 0.25 + rightPct * 0.55 : 0})`,
           }}
         />
-        <span className={`absolute right-1 top-1/2 -translate-y-1/2 font-mono text-[7px] ${
-          rightPct > 0.1 ? 'text-[#40e0d0]' : 'text-zinc-600'
-        }`}
-        >
+        <span className="ios-numeric absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-zinc-400">
           {rightVar.toFixed(2)}
         </span>
       </div>
@@ -154,59 +147,36 @@ export function PresenceCard() {
   }, []))
 
   return (
-    <div className="space-y-2.5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-purple-400">👤</span>
-          <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-            Bed Presence
-          </h3>
-        </div>
-        {frame && (
-          <span className="text-[9px] text-zinc-600">
-            {formatTimestamp(frame.ts)}
-          </span>
-        )}
-      </div>
+    <div className="space-y-3">
+      <CardTitle title="Bed presence" meta={frame ? formatTimestamp(frame.ts) : undefined} />
 
       {/* Status row — left and right occupied indicators (server-derived) */}
-      <div className="flex items-center">
-        <PresenceStatus
-          label="Left"
-          occupied={leftOccupied}
-          color="#4a9eff"
-        />
-        <div className="w-9" />
-        {' '}
-        {/* spacer matching zone labels */}
-        <PresenceStatus
-          label="Right"
-          occupied={rightOccupied}
-          color="#40e0d0"
-        />
+      <div className="grid grid-cols-2 overflow-hidden rounded-lg bg-zinc-800/60 [&>*+*]:border-l [&>*+*]:border-zinc-700/60">
+        <PresenceStatus label="Left" occupied={leftOccupied} color={LEFT_COLOR} />
+        <PresenceStatus label="Right" occupied={rightOccupied} color={RIGHT_COLOR} />
       </div>
 
       {/* Zone activity bars (raw channel variance — visualization only) */}
       {variance.leftVariance.length > 0 && (
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           <ZoneActivityRow
             zone={0}
             label="Head"
-            icon={<Brain size={8} />}
+            icon={<Brain size={13} />}
             leftVariance={variance.leftVariance}
             rightVariance={variance.rightVariance}
           />
           <ZoneActivityRow
             zone={1}
             label="Torso"
-            icon={<PersonStanding size={8} />}
+            icon={<PersonStanding size={13} />}
             leftVariance={variance.leftVariance}
             rightVariance={variance.rightVariance}
           />
           <ZoneActivityRow
             zone={2}
             label="Legs"
-            icon={<Footprints size={8} />}
+            icon={<Footprints size={13} />}
             leftVariance={variance.leftVariance}
             rightVariance={variance.rightVariance}
           />
@@ -215,9 +185,7 @@ export function PresenceCard() {
 
       {/* No data state */}
       {!frame && (
-        <div className="flex h-20 items-center justify-center rounded-xl bg-zinc-800/50">
-          <span className="text-xs text-zinc-600">Waiting for presence data...</span>
-        </div>
+        <EmptyState icon={<User size={24} strokeWidth={1.5} />} text="Waiting for presence data" height="h-24" />
       )}
     </div>
   )
@@ -233,21 +201,13 @@ function PresenceStatus({
   color: string
 }) {
   return (
-    <div className="flex flex-1 items-center justify-center gap-1">
+    <div className="flex min-h-[44px] items-center justify-center gap-2">
       <span
-        className="inline-block h-1.5 w-1.5 rounded-full"
-        style={{
-          backgroundColor: occupied ? color : 'rgba(113,113,122,0.2)',
-          boxShadow: occupied ? `0 0 4px ${color}99` : 'none',
-        }}
+        className="inline-block h-2 w-2 rounded-full"
+        style={{ backgroundColor: occupied ? color : '#48484A' }}
       />
-      <span
-        className="text-[10px] font-bold uppercase tracking-wider"
-        style={{ color: occupied ? color : '#71717a' }}
-      >
-        {label}
-      </span>
-      <span className="text-[8px] text-zinc-600">
+      <span className="text-[15px] text-white">{label}</span>
+      <span className="text-[15px] text-zinc-500">
         {occupied ? 'Occupied' : 'Empty'}
       </span>
     </div>

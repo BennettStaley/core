@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useOnSensorFrame, type LogFrame, type GestureFrame, type SensorFrame } from '@/src/hooks/useSensorStream'
-import { Terminal, Trash2, Pause, Play } from 'lucide-react'
+import { Trash2, Pause, Play } from 'lucide-react'
+import { SegmentedControl } from '@/src/ui/ios'
 
 const MAX_ENTRIES = 100
 
@@ -146,56 +147,46 @@ export function FirmwareLogConsole() {
   const entryCount = mode === 'logs' ? logs.length : filteredFrames.length
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-3">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <Terminal size={14} className="text-zinc-400" />
-          <h3 className="text-sm font-semibold text-zinc-200">Console</h3>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {/* Mode toggle */}
-          <div className="flex rounded-md bg-zinc-800/50">
-            <button
-              onClick={() => handleModeSwitch('logs')}
-              className={`px-2 py-0.5 text-[9px] font-medium rounded-l-md transition-colors ${
-                mode === 'logs' ? 'bg-zinc-700 text-zinc-200' : 'text-zinc-500'
-              }`}
-            >
-              Logs
-            </button>
-            <button
-              onClick={() => handleModeSwitch('frames')}
-              className={`px-2 py-0.5 text-[9px] font-medium rounded-r-md transition-colors ${
-                mode === 'frames' ? 'bg-zinc-700 text-zinc-200' : 'text-zinc-500'
-              }`}
-            >
-              Frames
-            </button>
-          </div>
-
-          {/* Pause */}
+      <div className="flex min-h-[28px] items-center justify-between gap-2">
+        <h3 className="text-[17px] font-semibold text-white">Console</h3>
+        <div className="flex items-center">
+          <span className="ios-numeric mr-1 text-[13px] text-zinc-500">
+            {entryCount}
+            {paused ? ' · Paused' : ''}
+          </span>
           <button
+            type="button"
             onClick={() => setPaused(p => !p)}
-            className={`rounded-md p-1 text-[9px] ${
-              paused ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-600 hover:text-zinc-400'
-            }`}
+            className="grid h-11 w-11 place-items-center text-sky-400 active:opacity-50"
+            aria-label={paused ? 'Resume' : 'Pause'}
             title={paused ? 'Resume' : 'Pause'}
           >
-            {paused ? <Play size={11} /> : <Pause size={11} />}
+            {paused ? <Play size={18} /> : <Pause size={18} />}
           </button>
-
-          <span className="text-[9px] tabular-nums text-zinc-600">{entryCount}</span>
-
-          <button onClick={handleClear} className="rounded-md p-1 text-zinc-600 hover:text-zinc-400" title="Clear">
-            <Trash2 size={11} />
+          <button
+            type="button"
+            onClick={handleClear}
+            className="-mr-3 grid h-11 w-11 place-items-center text-sky-400 active:opacity-50"
+            aria-label="Clear"
+            title="Clear"
+          >
+            <Trash2 size={18} />
           </button>
         </div>
       </div>
 
+      <SegmentedControl
+        aria-label="Console view"
+        options={[{ value: 'logs', label: 'Logs' }, { value: 'frames', label: 'Frames' }]}
+        value={mode}
+        onChange={handleModeSwitch}
+      />
+
       {/* Type filter (frames mode only) */}
       {mode === 'frames' && typesSeen.length > 0 && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1.5">
           <FilterPill label="All" active={typeFilter === null} onClick={() => setTypeFilter(null)} />
           {typesSeen.map(type => (
             <FilterPill key={type} label={type} active={typeFilter === type} onClick={() => setTypeFilter(type)} />
@@ -207,13 +198,13 @@ export function FirmwareLogConsole() {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="h-52 overflow-y-auto rounded-xl bg-zinc-950 p-2 font-mono text-[10px] leading-relaxed"
+        className="h-52 overflow-y-auto rounded-lg bg-black/60 p-2.5 font-mono text-[11px] leading-relaxed"
       >
         {mode === 'logs'
           ? (
               logs.length === 0
                 ? (
-                    <Empty text="Waiting for firmware logs..." />
+                    <Empty text="Waiting for firmware logs" />
                   )
                 : (
                     logs.map((log, i) => (
@@ -230,7 +221,7 @@ export function FirmwareLogConsole() {
           : (
               filteredFrames.length === 0
                 ? (
-                    <Empty text="Waiting for frames..." />
+                    <Empty text="Waiting for frames" />
                   )
                 : (
                     filteredFrames.map((entry, i) => {
@@ -257,7 +248,7 @@ export function FirmwareLogConsole() {
                             </span>
                           </button>
                           {isExpanded && (
-                            <pre className="ml-4 max-h-48 overflow-auto py-1 text-[9px] text-zinc-500">
+                            <pre className="ml-4 max-h-48 overflow-auto py-1 text-[11px] text-zinc-500">
                               {entry.json}
                             </pre>
                           )}
@@ -274,7 +265,7 @@ export function FirmwareLogConsole() {
 function Empty({ text }: { text: string }) {
   return (
     <div className="flex h-full items-center justify-center">
-      <span className="text-zinc-600">{text}</span>
+      <span className="font-sans text-[13px] text-zinc-500">{text}</span>
     </div>
   )
 }
@@ -283,8 +274,8 @@ function FilterPill({ label, active, onClick }: { label: string, active: boolean
   return (
     <button
       onClick={onClick}
-      className={`rounded-md px-2 py-0.5 text-[8px] font-medium transition-colors ${
-        active ? 'bg-sky-500/20 text-sky-400' : 'bg-zinc-800 text-zinc-500 active:bg-zinc-700'
+      className={`min-h-[28px] rounded-full px-3 text-[13px] transition-colors ${
+        active ? 'bg-sky-500 text-white' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'
       }`}
     >
       {label}
