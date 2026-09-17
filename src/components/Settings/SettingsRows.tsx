@@ -63,7 +63,7 @@ export function SettingsSwitch({ checked, onChange, disabled, ariaLabel }: {
   ariaLabel?: string
 }) {
   return (
-    <span className="flex shrink-0 [&>button>span]:left-0">
+    <span className="flex shrink-0">
       <Switch checked={checked} onChange={onChange} disabled={disabled} aria-label={ariaLabel} />
     </span>
   )
