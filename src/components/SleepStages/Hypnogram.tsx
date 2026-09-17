@@ -1,8 +1,10 @@
 'use client'
 
-import { useMemo, useState, useCallback, useRef } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import type { SleepStage } from '@/src/lib/sleep-stages'
-import { STAGE_COLORS } from '@/src/lib/sleep-stages'
+import { CHART_AXIS, CHART_FONT_SIZE, CHART_GRID } from '@/src/components/biometrics/ChartCard'
+import { useElementWidth } from '@/src/components/biometrics/useElementWidth'
+import { STAGE_COLORS, STAGE_LABELS, STAGE_ORDER } from './stageColors'
 
 interface HypnogramBlock {
   start: number
@@ -26,90 +28,64 @@ interface HypnogramProps {
   endTime: number // unix ms
 }
 
-const STAGE_LABELS: SleepStage[] = ['wake', 'rem', 'light', 'deep']
-const STAGE_DISPLAY: Record<SleepStage, string> = {
-  wake: 'Wake',
-  rem: 'REM',
-  light: 'Light',
-  deep: 'Deep',
+const CHART_HEIGHT = 156
+const PAD_LEFT = 46
+const PAD_RIGHT = 2
+const PAD_TOP = 2
+const PAD_BOTTOM = 22
+const BAND_HEIGHT = (CHART_HEIGHT - PAD_TOP - PAD_BOTTOM) / STAGE_ORDER.length
+
+function formatHour(ms: number): string {
+  const h = new Date(ms).getHours()
+  return `${h % 12 || 12}${h >= 12 ? 'PM' : 'AM'}`
 }
 
-const CHART_HEIGHT = 160
-const CHART_PADDING_LEFT = 52
-const CHART_PADDING_RIGHT = 12
-const CHART_PADDING_TOP = 8
-const CHART_PADDING_BOTTOM = 28
-const BAND_HEIGHT = (CHART_HEIGHT - CHART_PADDING_TOP - CHART_PADDING_BOTTOM) / 4
-const SVG_HEIGHT = CHART_HEIGHT
-
-function formatTime(ms: number): string {
-  const d = new Date(ms)
-  const h = d.getHours()
-  const m = d.getMinutes()
-  const ampm = h >= 12 ? 'PM' : 'AM'
-  const h12 = h % 12 || 12
-  return m === 0 ? `${h12}${ampm}` : `${h12}:${m.toString().padStart(2, '0')}${ampm}`
+function formatClock(ms: number): string {
+  return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
 }
 
 /**
- * SVG-based hypnogram chart showing sleep stages over time.
- *
- * Y-axis: 4 discrete stages (Deep at bottom, Wake at top)
- * X-axis: Time with hour labels
- * Interactive: tap to select epoch and view vitals detail
+ * Sleep stages over time (Health-style): one horizontal band per stage,
+ * awake on top, deep at the bottom. Tap to inspect an epoch's vitals.
  */
 export function Hypnogram({ blocks, epochs, startTime, endTime }: HypnogramProps) {
   const [selectedEpoch, setSelectedEpoch] = useState<HypnogramEpoch | null>(null)
-  const svgRef = useRef<SVGSVGElement>(null)
+  const [measureRef, width] = useElementWidth<HTMLDivElement>()
 
   const totalDuration = endTime - startTime
-  const chartWidth = 360 // will be responsive via viewBox
-  const plotWidth = chartWidth - CHART_PADDING_LEFT - CHART_PADDING_RIGHT
+  const plotWidth = Math.max(1, width - PAD_LEFT - PAD_RIGHT)
 
-  // Map time to x position
   const timeToX = useCallback(
-    (t: number) => {
-      if (totalDuration <= 0) return CHART_PADDING_LEFT
-      return CHART_PADDING_LEFT + ((t - startTime) / totalDuration) * plotWidth
-    },
+    (t: number) => (totalDuration <= 0 ? PAD_LEFT : PAD_LEFT + ((t - startTime) / totalDuration) * plotWidth),
     [startTime, totalDuration, plotWidth],
   )
 
-  // Map stage to y band center
-  const stageToY = (stage: SleepStage) => {
-    // STAGE_LABELS order: wake(0), rem(1), light(2), deep(3) — top to bottom
-    const idx = STAGE_LABELS.indexOf(stage)
-    return CHART_PADDING_TOP + idx * BAND_HEIGHT + BAND_HEIGHT / 2
-  }
+  const stageTop = (stage: SleepStage) => PAD_TOP + STAGE_ORDER.indexOf(stage) * BAND_HEIGHT
 
-  // Generate time axis ticks (roughly every hour)
+  // Hour ticks; skip to every 2nd/3rd hour when labels would collide.
   const timeTicks = useMemo(() => {
+    const hours = totalDuration / 3_600_000
+    const step = hours > 0 && plotWidth / hours < 46 ? (plotWidth / hours < 24 ? 3 : 2) : 1
     const ticks: number[] = []
-    // Start from next whole hour after startTime
-    const startHour = new Date(startTime)
-    startHour.setMinutes(0, 0, 0)
-    let tick = startHour.getTime() + 3600_000
+    const first = new Date(startTime)
+    first.setMinutes(0, 0, 0)
+    let tick = first.getTime() + 3_600_000
     while (tick < endTime) {
-      ticks.push(tick)
-      tick += 3600_000
+      if (new Date(tick).getHours() % step === 0) ticks.push(tick)
+      tick += 3_600_000
     }
     return ticks
-  }, [startTime, endTime])
+  }, [startTime, endTime, totalDuration, plotWidth])
 
-  // Handle tap to find nearest epoch
   const handleClick = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!svgRef.current || epochs.length === 0) return
-      const rect = svgRef.current.getBoundingClientRect()
-      const clickX = ((e.clientX - rect.left) / rect.width) * chartWidth
-      const clickTime = startTime + ((clickX - CHART_PADDING_LEFT) / plotWidth) * totalDuration
-
-      // Find nearest epoch
+      if (epochs.length === 0) return
+      const rect = e.currentTarget.getBoundingClientRect()
+      const clickTime = startTime + ((e.clientX - rect.left - PAD_LEFT) / plotWidth) * totalDuration
       let nearest = epochs[0]
-      let minDist = Math.abs(epochs[0].start + epochs[0].duration / 2 - clickTime)
+      let minDist = Infinity
       for (const ep of epochs) {
-        const mid = ep.start + ep.duration / 2
-        const dist = Math.abs(mid - clickTime)
+        const dist = Math.abs(ep.start + ep.duration / 2 - clickTime)
         if (dist < minDist) {
           minDist = dist
           nearest = ep
@@ -117,159 +93,93 @@ export function Hypnogram({ blocks, epochs, startTime, endTime }: HypnogramProps
       }
       setSelectedEpoch(prev => (prev?.start === nearest.start ? null : nearest))
     },
-    [epochs, startTime, totalDuration, plotWidth, chartWidth],
+    [epochs, startTime, totalDuration, plotWidth],
   )
 
-  // Early return AFTER all hooks to satisfy Rules of Hooks
   if (totalDuration <= 0 || blocks.length === 0) {
-    return (
-      <div className="flex h-40 items-center justify-center text-zinc-500 text-sm">
-        No sleep stage data available
-      </div>
-    )
+    return <p className="py-6 text-center text-[15px] text-zinc-500">No sleep stage data for this night.</p>
   }
 
+  const selectedX = selectedEpoch ? timeToX(selectedEpoch.start + selectedEpoch.duration / 2) : 0
+
   return (
-    <div className="w-full">
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${chartWidth} ${SVG_HEIGHT}`}
-        className="w-full touch-none"
-        onClick={handleClick}
-      >
-        {/* Y-axis labels */}
-        {STAGE_LABELS.map(stage => (
-          <text
-            key={stage}
-            x={CHART_PADDING_LEFT - 8}
-            y={stageToY(stage)}
-            textAnchor="end"
-            dominantBaseline="central"
-            className="fill-zinc-500"
-            fontSize="10"
-          >
-            {STAGE_DISPLAY[stage]}
-          </text>
+    <div ref={measureRef} className="w-full">
+      <svg width={width} height={CHART_HEIGHT} className="block touch-manipulation select-none" onClick={handleClick}>
+        {STAGE_ORDER.map((stage, i) => (
+          <g key={stage}>
+            {i > 0 && (
+              <line x1={PAD_LEFT} x2={width - PAD_RIGHT} y1={stageTop(stage)} y2={stageTop(stage)} stroke={CHART_GRID} strokeWidth={1} />
+            )}
+            <text
+              x={0}
+              y={stageTop(stage) + BAND_HEIGHT / 2}
+              dominantBaseline="central"
+              fill={CHART_AXIS}
+              fontSize={CHART_FONT_SIZE}
+            >
+              {STAGE_LABELS[stage]}
+            </text>
+          </g>
         ))}
+        <line
+          x1={PAD_LEFT}
+          x2={width - PAD_RIGHT}
+          y1={CHART_HEIGHT - PAD_BOTTOM}
+          y2={CHART_HEIGHT - PAD_BOTTOM}
+          stroke={CHART_GRID}
+          strokeWidth={1}
+        />
 
-        {/* Horizontal grid lines */}
-        {STAGE_LABELS.map(stage => (
-          <line
-            key={`grid-${stage}`}
-            x1={CHART_PADDING_LEFT}
-            y1={stageToY(stage)}
-            x2={chartWidth - CHART_PADDING_RIGHT}
-            y2={stageToY(stage)}
-            stroke="#27272a"
-            strokeWidth="0.5"
-          />
-        ))}
-
-        {/* Stage blocks as rectangles */}
         {blocks.map((block, i) => {
           const x = timeToX(Math.max(block.start, startTime))
           const xEnd = timeToX(Math.min(block.end, endTime))
-          const y = stageToY(block.stage) - BAND_HEIGHT / 2 + 2
-          const width = Math.max(xEnd - x, 1)
-          const height = BAND_HEIGHT - 4
-
           return (
             <rect
               key={i}
               x={x}
-              y={y}
-              width={width}
-              height={height}
+              y={stageTop(block.stage) + 6}
+              width={Math.max(xEnd - x, 1.5)}
+              height={BAND_HEIGHT - 12}
               rx={3}
               fill={STAGE_COLORS[block.stage]}
-              opacity={0.85}
             />
           )
         })}
 
-        {/* Time axis ticks */}
         {timeTicks.map(tick => (
-          <g key={tick}>
-            <line
-              x1={timeToX(tick)}
-              y1={CHART_HEIGHT - CHART_PADDING_BOTTOM}
-              x2={timeToX(tick)}
-              y2={CHART_HEIGHT - CHART_PADDING_BOTTOM + 4}
-              stroke="#52525b"
-              strokeWidth="0.5"
-            />
-            <text
-              x={timeToX(tick)}
-              y={CHART_HEIGHT - CHART_PADDING_BOTTOM + 16}
-              textAnchor="middle"
-              className="fill-zinc-500"
-              fontSize="9"
-            >
-              {formatTime(tick)}
-            </text>
-          </g>
+          <text
+            key={tick}
+            x={timeToX(tick)}
+            y={CHART_HEIGHT - 5}
+            textAnchor={timeToX(tick) > width - 20 ? 'end' : 'middle'}
+            fill={CHART_AXIS}
+            fontSize={CHART_FONT_SIZE}
+          >
+            {formatHour(tick)}
+          </text>
         ))}
 
-        {/* Selection indicator */}
         {selectedEpoch && (
-          <>
-            <line
-              x1={timeToX(selectedEpoch.start + selectedEpoch.duration / 2)}
-              y1={CHART_PADDING_TOP}
-              x2={timeToX(selectedEpoch.start + selectedEpoch.duration / 2)}
-              y2={CHART_HEIGHT - CHART_PADDING_BOTTOM}
-              stroke="white"
-              strokeWidth="1"
-              strokeDasharray="2,2"
-              opacity={0.6}
-            />
-            <circle
-              cx={timeToX(selectedEpoch.start + selectedEpoch.duration / 2)}
-              cy={stageToY(selectedEpoch.stage)}
-              r={4}
-              fill="white"
-              stroke={STAGE_COLORS[selectedEpoch.stage]}
-              strokeWidth="2"
-            />
-          </>
+          <line
+            x1={selectedX}
+            x2={selectedX}
+            y1={PAD_TOP}
+            y2={CHART_HEIGHT - PAD_BOTTOM}
+            stroke="#FFFFFF"
+            strokeWidth={1}
+            opacity={0.5}
+          />
         )}
       </svg>
 
-      {/* Selected epoch detail */}
       {selectedEpoch && (
-        <div className="mt-2 flex items-center justify-between rounded-lg bg-zinc-900 px-3 py-2 text-xs">
-          <span className="text-zinc-400">
-            {formatTime(selectedEpoch.start)}
-          </span>
-          <span
-            className="font-medium"
-            style={{ color: STAGE_COLORS[selectedEpoch.stage] }}
-          >
-            {STAGE_DISPLAY[selectedEpoch.stage]}
-          </span>
-          {selectedEpoch.heartRate !== null && (
-            <span className="text-zinc-400">
-              {Math.round(selectedEpoch.heartRate)}
-              {' '}
-              bpm
-            </span>
-          )}
-          {selectedEpoch.hrv !== null && (
-            <span className="text-zinc-400">
-              HRV
-              {' '}
-              {Math.round(selectedEpoch.hrv)}
-              ms
-            </span>
-          )}
-          {selectedEpoch.breathingRate !== null && (
-            <span className="text-zinc-400">
-              {Math.round(selectedEpoch.breathingRate)}
-              {' '}
-              br/m
-            </span>
-          )}
-        </div>
+        <p className="ios-numeric mt-2 text-[13px] leading-[18px] text-zinc-500">
+          <span className="text-white">{STAGE_LABELS[selectedEpoch.stage]}</span>
+          {` at ${formatClock(selectedEpoch.start)}`}
+          {selectedEpoch.heartRate !== null && ` · ${Math.round(selectedEpoch.heartRate)} bpm`}
+          {selectedEpoch.hrv !== null && ` · HRV ${Math.round(selectedEpoch.hrv)} ms`}
+          {selectedEpoch.breathingRate !== null && ` · ${Math.round(selectedEpoch.breathingRate)} br/min`}
+        </p>
       )}
     </div>
   )

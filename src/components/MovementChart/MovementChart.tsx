@@ -3,9 +3,15 @@
 import { trpc } from '@/src/utils/trpc'
 import { useSide } from '@/src/hooks/useSide'
 import { useWeekNavigator } from '@/src/hooks/useWeekNavigator'
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/ui/card'
+import {
+  CHART_AXIS,
+  CHART_FONT_SIZE,
+  CHART_GRID,
+  ChartCard,
+  METRIC_COLORS,
+  SECONDARY_SERIES_COLOR,
+} from '@/src/components/biometrics/ChartCard'
 import { WeekNavigator } from '@/src/components/WeekNavigator/WeekNavigator'
-import { Activity } from 'lucide-react'
 import { useMemo } from 'react'
 import {
   BarChart,
@@ -40,15 +46,15 @@ interface ChartDataPoint {
 }
 
 /**
- * Format the header "Restless: X" chip. Single-night ranges get raw
- * minutes; multi-night ranges average per night and switch to hours so
- * "Restless: 3.7h/night" reads naturally instead of "Restless: 1559 min".
+ * Restless-time footnote. Single-night ranges get raw minutes; multi-night
+ * ranges average per night and switch to hours so it reads
+ * "Restless 3.7h per night" instead of "Restless 1559 min".
  */
 function formatRestlessChip(restlessMinutes: number, nights: number): string {
-  if (nights <= 1) return `Restless: ${restlessMinutes} min`
+  if (nights <= 1) return `Restless ${restlessMinutes} min`
   const minPerNight = restlessMinutes / nights
-  if (minPerNight >= 60) return `Restless: ${(minPerNight / 60).toFixed(1)}h/night`
-  return `Restless: ${Math.round(minPerNight)} min/night`
+  if (minPerNight >= 60) return `Restless ${(minPerNight / 60).toFixed(1)}h per night`
+  return `Restless ${Math.round(minPerNight)} min per night`
 }
 
 /**
@@ -181,17 +187,16 @@ function MovementTooltip({ active, payload, dualSide, bucketSeconds }: MovementT
   })
   const unit = ' /hr'
   return (
-    <div className="rounded-lg bg-zinc-800 px-3 py-2 text-xs shadow-lg ring-1 ring-white/10">
-      <p className="text-zinc-400">{tooltipLabel}</p>
-      <p className="font-semibold text-amber-400">
-        {dualSide ? 'Left: ' : 'Movement: '}
+    <div className="ios-numeric rounded-lg bg-zinc-800 px-3 py-2 text-[13px] leading-[18px]">
+      <p className="text-zinc-500">{tooltipLabel}</p>
+      <p className="text-white">
+        {dualSide ? 'Left ' : ''}
         {data.movement}
         {unit}
       </p>
       {dualSide && data.movementOther != null && (
-        <p className="font-semibold text-teal-400">
-          Right:
-          {' '}
+        <p className="text-white">
+          {'Right '}
           {data.movementOther}
           {unit}
         </p>
@@ -302,13 +307,6 @@ export function MovementChart({ dualSide = false, hideNav = false }: MovementCha
     return Math.floor(chartData.length / 5) - 1
   }, [chartData.length, tickKeys])
 
-  const restlessnessColor
-    = stats.restlessnessLevel === 'High'
-      ? 'text-red-400'
-      : stats.restlessnessLevel === 'Medium'
-        ? 'text-amber-400'
-        : 'text-emerald-400'
-
   const isLoading
     = bucketsQuery.isLoading
       || summaryQuery.isLoading
@@ -319,8 +317,10 @@ export function MovementChart({ dualSide = false, hideNav = false }: MovementCha
     || (dualSide && (otherBucketsQuery.error || otherSummaryQuery.error)),
   )
 
+  const axisTick = { fontSize: CHART_FONT_SIZE, fill: CHART_AXIS }
+
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-3">
       {!hideNav && (
         <WeekNavigator
           label={label}
@@ -331,160 +331,122 @@ export function MovementChart({ dualSide = false, hideNav = false }: MovementCha
         />
       )}
 
-      <Card className="border-zinc-800 bg-zinc-900/50">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Activity size={14} className="text-amber-400" />
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Movement
-              </CardTitle>
-            </div>
-            <span className="text-xs text-amber-400">
-              {formatRestlessChip(stats.restlessMinutes, nights)}
-            </span>
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-4">
-          {/* Summary stats row — matches iOS 3-stat layout */}
-          <div className="grid grid-cols-3 divide-x divide-zinc-700">
+      <ChartCard title="Movement" footnote={formatRestlessChip(stats.restlessMinutes, nights)}>
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
             <StatItem
               value={String(stats.positionChanges)}
-              label="Position Changes"
+              label="Moves"
               secondaryValue={otherStats ? String(otherStats.positionChanges) : undefined}
             />
             <StatItem
               value={`${stats.timeStillPercent}%`}
-              label="Time Still"
+              label="Time still"
               secondaryValue={otherStats ? `${otherStats.timeStillPercent}%` : undefined}
             />
             <StatItem
               value={stats.restlessnessLevel}
               label="Restlessness"
-              valueClassName={restlessnessColor}
               secondaryValue={otherStats ? otherStats.restlessnessLevel : undefined}
             />
           </div>
 
-          {/* Dual-side legend */}
           {dualSide && (
-            <div className="flex items-center justify-center gap-4 text-[10px]">
-              <div className="flex items-center gap-1.5">
-                <span className="inline-block h-2 w-3 rounded-sm bg-amber-500" />
-                <span className="text-zinc-400 capitalize">{side}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="inline-block h-2 w-3 rounded-sm bg-teal-400" />
-                <span className="text-zinc-400 capitalize">{otherSide}</span>
-              </div>
+            <div className="flex items-center gap-4 text-[13px] text-zinc-500">
+              <span className="flex items-center gap-1.5 capitalize">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: METRIC_COLORS.movement }} />
+                {side}
+              </span>
+              <span className="flex items-center gap-1.5 capitalize">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: SECONDARY_SERIES_COLOR }} />
+                {otherSide}
+              </span>
             </div>
           )}
 
-          {/* Bar chart */}
           {isLoading
-            ? (
-                <div className="flex h-[140px] items-center justify-center">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-600 border-t-amber-400" />
-                </div>
-              )
+            ? <div className="h-[140px]" aria-busy="true" />
             : hasError
-              ? (
-                  <div className="flex h-[140px] items-center justify-center">
-                    <p className="text-sm text-red-400">Failed to load movement data</p>
-                  </div>
-                )
+              ? <p className="py-10 text-center text-[15px] text-red-400">Couldn’t load movement.</p>
               : chartData.length === 0
-                ? (
-                    <div className="flex h-[140px] items-center justify-center">
-                      <p className="text-sm text-zinc-500">No movement data available</p>
-                    </div>
-                  )
+                ? <p className="py-10 text-center text-[15px] text-zinc-500">No movement recorded this week.</p>
                 : (
                     <div className="h-[140px] w-full">
                       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                         <BarChart
                           data={chartData}
-                          margin={{ top: 4, right: 8, bottom: 0, left: 4 }}
+                          margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
                           barCategoryGap="15%"
                         >
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="rgba(255,255,255,0.06)"
-                            vertical={false}
-                          />
+                          <CartesianGrid stroke={CHART_GRID} vertical={false} />
                           <XAxis
                             dataKey="time"
-                            tick={{ fontSize: 10, fill: '#71717a' }}
+                            tick={axisTick}
                             tickLine={false}
-                            axisLine={false}
+                            axisLine={{ stroke: CHART_GRID }}
                             interval={tickInterval}
                             ticks={tickKeys}
                             tickFormatter={(t: string) => formatTickLabel(t, isMultiDay)}
-                            padding={{ left: 12, right: 12 }}
+                            padding={{ left: 8, right: 8 }}
                           />
                           <YAxis
-                            tick={{ fontSize: 10, fill: '#71717a' }}
+                            tick={axisTick}
                             tickLine={false}
                             axisLine={false}
-                            width={52}
+                            width={40}
                             unit="/hr"
                             allowDecimals={false}
                           />
                           <Tooltip
                             content={<MovementTooltip dualSide={dualSide} bucketSeconds={bucketSeconds} />}
-                            cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                            cursor={{ fill: 'rgba(255,255,255,0.06)' }}
                           />
                           <Bar
                             dataKey="movement"
-                            fill="#f59e0b"
+                            fill={METRIC_COLORS.movement}
                             radius={[2, 2, 0, 0]}
-                            maxBarSize={dualSide ? 8 : 12}
+                            maxBarSize={dualSide ? 6 : 8}
                           />
                           {dualSide && (
                             <Bar
                               dataKey="movementOther"
-                              fill="#2dd4bf"
+                              fill={SECONDARY_SERIES_COLOR}
                               radius={[2, 2, 0, 0]}
-                              maxBarSize={8}
+                              maxBarSize={6}
                             />
                           )}
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
                   )}
-        </CardContent>
-      </Card>
+        </div>
+      </ChartCard>
     </div>
   )
 }
 
-/**
- * Individual stat display in the 3-column summary row.
- */
+/** One stat in the three-column summary row: white value, grey caption. */
 function StatItem({
   value,
   label,
-  valueClassName = 'text-white',
   secondaryValue,
 }: {
   value: string
   label: string
-  valueClassName?: string
   secondaryValue?: string
 }) {
   return (
-    <div className="flex flex-col items-center gap-1 py-1">
-      <div className="flex items-baseline gap-1">
-        <span className={`text-base font-semibold sm:text-lg ${valueClassName}`}>{value}</span>
+    <div className="min-w-0">
+      <p className="ios-numeric truncate">
+        <span className="text-[22px] font-semibold leading-7 text-white">{value}</span>
         {secondaryValue && (
-          <span className="text-xs text-zinc-500">
-            /
+          <span className="text-[15px] text-zinc-500">
+            {' / '}
             {secondaryValue}
           </span>
         )}
-      </div>
-      <span className="text-[10px] text-zinc-500">{label}</span>
+      </p>
+      <p className="truncate text-[13px] leading-[18px] text-zinc-500">{label}</p>
     </div>
   )
 }

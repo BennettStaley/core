@@ -1,238 +1,149 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useSide } from '@/src/providers/SideProvider'
+import { useSide, type SideSelection } from '@/src/providers/SideProvider'
 import { useWeekNavigator } from '@/src/hooks/useWeekNavigator'
 import { trpc } from '@/src/utils/trpc'
+import { PageHeader, SegmentedControl } from '@/src/ui/ios'
 
-// Sub-components
 import { SleepStagesCard } from '@/src/components/SleepStages/SleepStagesCard'
 import { VitalsPanel } from '@/src/components/VitalsPanel/VitalsPanel'
 import { MovementChart } from '@/src/components/MovementChart/MovementChart'
-import { SleepSummaryCard } from '@/src/components/biometrics/SleepSummaryCard'
-import { VitalsGrid } from '@/src/components/biometrics/VitalsGrid'
+import { SleepSummaryCard, nightCaption } from '@/src/components/biometrics/SleepSummaryCard'
 import { RawDataButton } from '@/src/components/biometrics/RawDataButton'
+import { WeekNavigator } from '@/src/components/WeekNavigator/WeekNavigator'
+import type { SleepRecord } from '@/src/components/biometrics/types'
 
-// Section IDs for scroll navigation
-const SECTIONS = [
-  { id: 'sleep', label: 'Sleep' },
-  { id: 'stages', label: 'Stages' },
-  { id: 'vitals', label: 'Vitals' },
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'movement', label: 'Movement' },
-] as const
+const SIDE_OPTIONS: ReadonlyArray<{ value: SideSelection, label: string }> = [
+  { value: 'left', label: 'Left' },
+  { value: 'right', label: 'Right' },
+  { value: 'both', label: 'Both' },
+]
 
 /**
- * Biometrics page — unified scrollable view matching iOS HealthScreen.
- *
- * Layout: date picker + L/R toggle → section pills →
- *   Sleep Summary → Stages → VitalsGrid (3-block) → Vitals charts →
- *   Sleep Sessions → Movement → Raw Data
+ * Sleep tab — Health-style vertical flow:
+ *   header (side filter) → week stepper → last-night summary →
+ *   stages → vitals (night/week) → weekly timeline → movement → export.
+ * Chart sections collapse into a single message until a night is recorded.
  */
 export default function DataPage() {
   const { selectedSide, activeSides, primarySide, selectSide } = useSide()
   const week = useWeekNavigator()
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   const showBothSides = selectedSide === 'both'
+  const leftActive = activeSides.includes('left')
+  const rightActive = activeSides.includes('right')
 
-  const handleSideToggle = useCallback(() => {
-    selectSide(primarySide === 'left' ? 'right' : 'left')
-  }, [primarySide, selectSide])
-
-  // Fetch sleep records for each active side
+  // Sleep records for each active side in the visible week
   const leftSleepQuery = trpc.biometrics.getSleepRecords.useQuery(
-    {
-      side: 'left',
-      startDate: week.weekStart,
-      endDate: week.weekEnd,
-      limit: 7,
-    },
-    { enabled: activeSides.includes('left') },
+    { side: 'left', startDate: week.weekStart, endDate: week.weekEnd, limit: 7 },
+    { enabled: leftActive },
   )
-
   const rightSleepQuery = trpc.biometrics.getSleepRecords.useQuery(
-    {
-      side: 'right',
-      startDate: week.weekStart,
-      endDate: week.weekEnd,
-      limit: 7,
-    },
-    { enabled: activeSides.includes('right') },
+    { side: 'right', startDate: week.weekStart, endDate: week.weekEnd, limit: 7 },
+    { enabled: rightActive },
   )
 
-  const leftRecords = ((leftSleepQuery.data ?? []) as SleepRecordRow[]).map(
-    r => ({ ...r, side: 'left' as const }),
-  )
-  const rightRecords = ((rightSleepQuery.data ?? []) as SleepRecordRow[]).map(
-    r => ({ ...r, side: 'right' as const }),
-  )
+  // Whether any night has ever been recorded — distinguishes a fresh install
+  // from an empty week.
+  const leftLatestQuery = trpc.biometrics.getLatestSleep.useQuery({ side: 'left' }, { enabled: leftActive })
+  const rightLatestQuery = trpc.biometrics.getLatestSleep.useQuery({ side: 'right' }, { enabled: rightActive })
 
-  const allSleepRecords = [
-    ...(activeSides.includes('left') ? leftRecords : []),
-    ...(activeSides.includes('right') ? rightRecords : []),
-  ].sort(
-    (a, b) => new Date(b.enteredBedAt).getTime() - new Date(a.enteredBedAt).getTime(),
-  )
+  const leftRecords: SleepRecord[] = leftActive
+    ? ((leftSleepQuery.data ?? []) as Omit<SleepRecord, 'side'>[]).map(r => ({ ...r, side: 'left' as const }))
+    : []
+  const rightRecords: SleepRecord[] = rightActive
+    ? ((rightSleepQuery.data ?? []) as Omit<SleepRecord, 'side'>[]).map(r => ({ ...r, side: 'right' as const }))
+    : []
+  const byNewest = (a: SleepRecord, b: SleepRecord) => new Date(b.enteredBedAt).getTime() - new Date(a.enteredBedAt).getTime()
+  leftRecords.sort(byNewest)
+  rightRecords.sort(byNewest)
+  const allSleepRecords = [...leftRecords, ...rightRecords].sort(byNewest)
 
-  const scrollToSection = useCallback((sectionId: string) => {
-    const el = document.getElementById(`section-${sectionId}`)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [])
+  const isLoading = (leftActive && leftSleepQuery.isLoading) || (rightActive && rightSleepQuery.isLoading)
+  const hasWeekData = allSleepRecords.length > 0
+  const hasHistory = Boolean((leftActive && leftLatestQuery.data) || (rightActive && rightLatestQuery.data))
+  const historyLoading = (leftActive && leftLatestQuery.isLoading) || (rightActive && rightLatestQuery.isLoading)
+
+  const latest = allSleepRecords[0]
+  // The week range already sits in the stepper below; the subtitle names the night shown.
+  const subtitle = latest ? nightCaption(latest) : (week.isCurrentWeek ? 'This week' : 'Earlier week')
 
   return (
-    <div ref={scrollContainerRef} className="space-y-4 sm:space-y-5">
-      {/* ── Header: Date Picker + Side Toggle ── */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={week.goToPreviousWeek}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 active:bg-zinc-700"
-          aria-label="Previous week"
-        >
-          <ChevronLeft size={16} />
-        </button>
+    <div className="space-y-4 pb-4">
+      <PageHeader
+        title="Sleep"
+        subtitle={subtitle}
+        trailing={(
+          <SegmentedControl
+            aria-label="Side"
+            options={SIDE_OPTIONS}
+            value={selectedSide}
+            onChange={selectSide}
+            className="w-[204px]"
+          />
+        )}
+      />
 
-        <button
-          onClick={week.goToCurrentWeek}
-          className="flex min-h-[36px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-zinc-800/80 px-2 py-1.5 active:bg-zinc-700"
-          aria-label="Go to current week"
-        >
-          <Calendar size={13} className="text-sky-400" />
-          <span className="text-[12px] font-medium text-white sm:text-[13px]">{week.label}</span>
-        </button>
+      <WeekNavigator
+        label={week.label}
+        isCurrentWeek={week.isCurrentWeek}
+        onPrevious={week.goToPreviousWeek}
+        onNext={week.goToNextWeek}
+        onToday={week.goToCurrentWeek}
+      />
 
-        <button
-          onClick={week.goToNextWeek}
-          disabled={week.isCurrentWeek}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 active:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed"
-          aria-label="Next week"
-        >
-          <ChevronRight size={16} />
-        </button>
+      {isLoading && <div className="h-[196px] rounded-xl bg-zinc-900" aria-busy="true" />}
 
-        {/* Side toggle — tap to swap L ↔ R */}
-        <button
-          onClick={handleSideToggle}
-          className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-zinc-800/80 px-3 active:bg-zinc-700"
-          aria-label={`Showing ${primarySide} side, tap to switch`}
-        >
-          <span
-            className={`flex h-5 w-5 items-center justify-center rounded-md text-[11px] font-bold ${
-              primarySide === 'left'
-                ? 'bg-sky-500/20 text-sky-400'
-                : 'bg-teal-500/20 text-teal-400'
-            }`}
-          >
-            {primarySide === 'left' ? 'L' : 'R'}
-          </span>
-          <span className="text-[11px] font-medium text-zinc-400">
-            {primarySide === 'left' ? 'Left' : 'Right'}
-          </span>
-        </button>
+      {!isLoading && !hasWeekData && (
+        <section className="rounded-xl bg-zinc-900 px-4 py-5 text-center">
+          <p className="text-[17px] text-white">
+            {hasHistory || historyLoading ? 'No sleep recorded this week.' : 'Sleep data will appear after your first night.'}
+          </p>
+        </section>
+      )}
+
+      {!isLoading && hasWeekData && (
+        <div className="space-y-6">
+          {/* Last night */}
+          {showBothSides
+            ? (
+                <div className="space-y-3">
+                  <SleepSummaryCard side="left" records={leftRecords} showSideName />
+                  <SleepSummaryCard side="right" records={rightRecords} showSideName />
+                </div>
+              )
+            : <SleepSummaryCard side={primarySide} records={allSleepRecords} />}
+
+          {/* Stages for the latest night */}
+          {showBothSides
+            ? (
+                <div className="space-y-3">
+                  <SleepStagesCard side="left" defaultTimeRange="night" hideTimeRangeSelector sideLabel="Left" />
+                  <SleepStagesCard side="right" defaultTimeRange="night" hideTimeRangeSelector sideLabel="Right" />
+                </div>
+              )
+            : <SleepStagesCard side={primarySide} defaultTimeRange="night" hideTimeRangeSelector />}
+
+          {/* Vitals: night / week */}
+          <VitalsPanel dualSide={showBothSides} hideNav hideSummary />
+
+          {/* Weekly timeline */}
+          {showBothSides
+            ? (
+                <div className="space-y-3">
+                  <SleepStagesCard side="left" defaultTimeRange="week" hideTimeRangeSelector sideLabel="Left" />
+                  <SleepStagesCard side="right" defaultTimeRange="week" hideTimeRangeSelector sideLabel="Right" />
+                </div>
+              )
+            : <SleepStagesCard side={primarySide} defaultTimeRange="week" hideTimeRangeSelector />}
+
+          <MovementChart dualSide={showBothSides} hideNav />
+        </div>
+      )}
+
+      <div className="pt-2">
+        <RawDataButton />
       </div>
-
-      {/* Section Navigation Pills */}
-      <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 sm:-mx-4 sm:gap-2 sm:px-4">
-        {SECTIONS.map(section => (
-          <button
-            key={section.id}
-            onClick={() => scrollToSection(section.id)}
-            className="whitespace-nowrap rounded-full bg-zinc-900 px-3 py-1.5 text-[11px] font-medium text-zinc-400 active:bg-zinc-800 active:text-white"
-          >
-            {section.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Sleep Summary ── */}
-      <section id="section-sleep">
-        {showBothSides
-          ? (
-              <div className="space-y-3">
-                <SideLabel side="left" />
-                <SleepSummaryCard records={allSleepRecords.filter(r => r.side === 'left')} />
-                <SideLabel side="right" />
-                <SleepSummaryCard records={allSleepRecords.filter(r => r.side === 'right')} />
-              </div>
-            )
-          : (
-              <SleepSummaryCard records={allSleepRecords} />
-            )}
-      </section>
-
-      {/* ── Nightly Sleep Analysis (quality + distribution — matches iOS) ── */}
-      <section id="section-stages">
-        {showBothSides
-          ? (
-              <div className="space-y-4">
-                <SideLabel side="left" />
-                <SleepStagesCard side="left" defaultTimeRange="night" hideTimeRangeSelector />
-                <SideLabel side="right" />
-                <SleepStagesCard side="right" defaultTimeRange="night" hideTimeRangeSelector />
-              </div>
-            )
-          : (
-              <SleepStagesCard side={primarySide} defaultTimeRange="night" hideTimeRangeSelector />
-            )}
-      </section>
-
-      {/* ── Vitals: 3-block grid + charts (HR, HRV, BR) ── */}
-      <section id="section-vitals" className="space-y-4">
-        <VitalsGrid />
-        <VitalsPanel dualSide={showBothSides} hideNav hideSummary />
-      </section>
-
-      {/* ── Weekly Sleep Timeline (bar chart — matches iOS) ── */}
-      <section id="section-timeline">
-        {showBothSides
-          ? (
-              <div className="space-y-4">
-                <SideLabel side="left" />
-                <SleepStagesCard side="left" defaultTimeRange="week" hideTimeRangeSelector />
-                <SideLabel side="right" />
-                <SleepStagesCard side="right" defaultTimeRange="week" hideTimeRangeSelector />
-              </div>
-            )
-          : (
-              <SleepStagesCard side={primarySide} defaultTimeRange="week" hideTimeRangeSelector />
-            )}
-      </section>
-
-      {/* ── Movement ── */}
-      <section id="section-movement">
-        <MovementChart dualSide={showBothSides} hideNav />
-      </section>
-
-      {/* ── Raw Data Export ── */}
-      <RawDataButton />
-    </div>
-  )
-}
-
-// ── Helper types & components ──
-
-interface SleepRecordRow {
-  id: number
-  side: 'left' | 'right'
-  enteredBedAt: Date
-  leftBedAt: Date
-  sleepDurationSeconds: number
-  timesExitedBed: number
-}
-
-function SideLabel({ side }: { side: 'left' | 'right' }) {
-  const isLeft = side === 'left'
-  return (
-    <div className="flex items-center gap-2">
-      <div className={`h-2 w-2 rounded-full ${isLeft ? 'bg-sky-400' : 'bg-teal-400'}`} />
-      <span className={`text-xs font-semibold capitalize ${isLeft ? 'text-sky-400' : 'text-teal-400'}`}>
-        {side}
-        {' '}
-        Side
-      </span>
     </div>
   )
 }
