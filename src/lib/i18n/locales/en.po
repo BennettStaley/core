@@ -17,20 +17,16 @@ msgstr ""
 msgid "Autopilot"
 msgstr "Autopilot"
 
-#: src/components/More/MoreScreen.tsx:37
-msgid "Device, sides, gestures, HomeKit"
-msgstr "Device, sides, gestures, HomeKit"
-
-#: src/components/More/MoreScreen.tsx:62
+#: src/components/More/MoreScreen.tsx:32
 msgid "Diagnostics"
 msgstr "Diagnostics"
 
-#: src/components/More/MoreScreen.tsx:56
-msgid "Live presence, bed temperature, humidity"
-msgstr "Live presence, bed temperature, humidity"
+#: src/components/More/MoreScreen.tsx:29
+msgid "Live sensor readings and scheduler internals, for troubleshooting."
+msgstr "Live sensor readings and scheduler internals, for troubleshooting."
 
 #: src/components/BottomNav/BottomNav.tsx:21
-#: src/components/More/MoreScreen.tsx:72
+#: src/components/More/MoreScreen.tsx:20
 msgid "More"
 msgstr "More"
 
@@ -38,23 +34,15 @@ msgstr "More"
 msgid "Offline"
 msgstr "Offline"
 
-#: src/components/More/MoreScreen.tsx:30
-msgid "Pod"
-msgstr "Pod"
-
 #: src/components/BottomNav/BottomNav.tsx:18
 msgid "Schedule"
 msgstr "Schedule"
 
-#: src/components/More/MoreScreen.tsx:55
+#: src/components/More/MoreScreen.tsx:31
 msgid "Sensors"
 msgstr "Sensors"
 
-#: src/components/More/MoreScreen.tsx:44
-msgid "Service health, updates, logs"
-msgstr "Service health, updates, logs"
-
-#: src/components/More/MoreScreen.tsx:36
+#: src/components/More/MoreScreen.tsx:23
 msgid "Settings"
 msgstr "Settings"
 
@@ -62,18 +50,14 @@ msgstr "Settings"
 msgid "Sleep"
 msgstr "Sleep"
 
-#: src/components/More/MoreScreen.tsx:43
+#: src/components/More/MoreScreen.tsx:24
 msgid "Status"
 msgstr "Status"
-
-#: src/components/More/MoreScreen.tsx:63
-msgid "Thermal delivery and scheduler internals"
-msgstr "Thermal delivery and scheduler internals"
 
 #: src/components/BottomNav/BottomNav.tsx:17
 msgid "Tonight"
 msgstr "Tonight"
 
-#: src/components/More/MoreScreen.tsx:49
+#: src/components/More/MoreScreen.tsx:28
 msgid "Tools"
 msgstr "Tools"

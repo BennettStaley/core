@@ -1,6 +1,5 @@
 import '@/app/globals.css'
 import { BottomNav } from '@/src/components/BottomNav/BottomNav'
-import { Header } from '@/src/components/Header/Header'
 import { SwipeContainer } from '@/src/components/SwipeContainer/SwipeContainer'
 import { allMessages, getI18nInstance } from '@/src/lib/i18n/appRouterI18n'
 import { LinguiClientProvider } from '@/src/providers/LinguiClientProvider'
@@ -51,10 +50,11 @@ export default async function LangLayout({
           <LinguiClientProvider initialLocale={lang} initialMessages={allMessages[lang]}>
             <SideProvider>
               <WeekNavigatorProvider>
-                <div className="flex min-h-dvh flex-col items-center bg-black pb-20 text-white sm:pb-24">
-                  <Header />
-
-                  <div className="w-full max-w-md space-y-4 px-3 pt-3 sm:space-y-6 sm:px-4 sm:pt-4">
+                <div
+                  className="flex min-h-dvh flex-col items-center bg-black pb-24 text-white"
+                  style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 0.75rem)' }}
+                >
+                  <div className="w-full max-w-md space-y-4 px-4">
                     <SwipeContainer>
                       {children}
                     </SwipeContainer>

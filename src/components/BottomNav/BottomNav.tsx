@@ -45,7 +45,7 @@ export const BottomNav = () => {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-900 bg-black/85 px-2 pt-1.5 backdrop-blur-xl"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800/70 bg-[#161617]/90 px-2 pt-1.5 backdrop-blur-xl backdrop-saturate-150"
       style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom, 0px))' }}
     >
       <div className="mx-auto flex max-w-md justify-between md:max-w-lg">
