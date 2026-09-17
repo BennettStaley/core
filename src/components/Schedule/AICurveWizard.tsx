@@ -2,21 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  X,
-  Sparkles,
-  Copy,
-  Check,
-  Share2,
-  ClipboardPaste,
   AlertTriangle,
+  Check,
   ChevronLeft,
   ChevronRight,
-  Trash2,
-  Plus,
-  Minus,
+  ClipboardPaste,
+  Copy,
   Save,
+  Share2,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ListRow, ListSection, Sheet } from '@/src/ui/ios'
+import { AddRow, SheetAction, Stepper } from './EditorRows'
+import { tempTint } from './scheduleFormat'
 import {
   generatePrompt,
   parseAIResponse,
@@ -284,132 +283,96 @@ export function AICurveWizard({ open, onClose, onApply }: AICurveWizardProps) {
     return { points, bedtimeMinutes: btMin }
   }, [curve, editablePoints])
 
-  if (!open) return null
+  const canAdvance = step === 0
+    ? preferences.trim().length > 0
+    : step === 1
+      ? true
+      : step === 2
+        ? parseResult?.success === true
+        : editablePoints.length >= 3
 
   return (
-    <>
-      <div className="fixed inset-0 z-[60] bg-black/60" onClick={onClose} />
-
-      <div className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[90dvh] flex-col rounded-t-2xl bg-zinc-900 shadow-xl sm:inset-x-auto sm:inset-y-4 sm:left-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:rounded-2xl">
-        <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Sparkles size={16} className="text-cyan-400" />
-            <span className="text-sm font-semibold text-white">Custom AI Curve</span>
-          </div>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
-            <X size={14} />
-          </button>
-        </div>
-
-        <div className="flex border-b border-zinc-800 px-4 py-2">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Custom AI Curve"
+      leading={step > 0
+        ? (
+            <button type="button" onClick={goBack} className="-ml-1.5 flex items-center text-[17px] text-sky-400 active:opacity-50">
+              <ChevronLeft size={24} strokeWidth={2.25} />
+              Back
+            </button>
+          )
+        : undefined}
+      trailing={step < 3
+        ? <SheetAction onClick={goNext} disabled={!canAdvance}>Next</SheetAction>
+        : <SheetAction onClick={handleApply} disabled={!canAdvance}>Use</SheetAction>}
+    >
+      <div className="space-y-6">
+        <nav aria-label="Steps" className="flex justify-between px-1">
           {STEP_LABELS.map((label, i) => (
             <button
               key={label}
+              type="button"
               onClick={() => goToStep(i as Step)}
               disabled={i > highestStep}
+              aria-current={i === step ? 'step' : undefined}
               className={cn(
-                'flex-1 py-1 text-[10px] font-medium uppercase tracking-wider transition-colors',
-                i === step ? 'text-cyan-400' : i <= highestStep ? 'text-zinc-500' : 'text-zinc-700',
+                'min-h-[32px] px-1 text-[13px] transition-colors',
+                i === step ? 'font-semibold text-white' : i <= highestStep ? 'text-sky-400' : 'text-zinc-600',
               )}
             >
-              {i + 1}
-              .
               {label}
             </button>
           ))}
-        </div>
+        </nav>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4">
-          {step === 0 && (
-            <StepDescribe
-              preferences={preferences}
-              onPreferencesChange={setPreferences}
-              templates={savedTemplates}
-              onLoadTemplate={handleLoadTemplate}
-              onDeleteTemplate={handleDeleteTemplate}
-            />
-          )}
-          {step === 1 && (
-            <StepReview
-              prompt={prompt}
-              copied={copied}
-              onCopy={handleCopy}
-              canShare={canShare}
-              onShare={handleShare}
-            />
-          )}
-          {step === 2 && (
-            <StepImport
-              jsonInput={jsonInput}
-              onJsonInputChange={setJsonInput}
-              parseResult={parseResult}
-              onPaste={handlePaste}
-            />
-          )}
-          {step === 3 && curve && (
-            <StepPreview
-              curve={curve}
-              editablePoints={editablePoints}
-              tempRange={tempRange}
-              chartData={chartData}
-              onUpdatePoint={updatePoint}
-              onAddPoint={addPoint}
-              onRemovePoint={removePoint}
-              onSaveTemplate={handleSaveTemplate}
-              onApply={handleApply}
-            />
-          )}
-        </div>
-
-        <div className="flex items-center justify-between border-t border-zinc-800 px-4 py-3">
-          <button
-            onClick={goBack}
-            disabled={step === 0}
-            className="flex items-center gap-1 text-xs text-zinc-400 disabled:opacity-30"
-          >
-            <ChevronLeft size={14} />
-            {' '}
-            Back
-          </button>
-
-          {step === 0 && (
-            <div className="flex gap-2">
-              <button
-                onClick={handleSkipToImport}
-                className="flex items-center gap-1 rounded-lg border border-zinc-800 px-4 py-2 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-700"
-              >
-                <ClipboardPaste size={12} />
-                {' '}
-                Import
-              </button>
-              <button
-                onClick={goNext}
-                disabled={!preferences.trim()}
-                className="flex items-center gap-1 rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-600 disabled:opacity-40"
-              >
-                Generate
-                {' '}
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          )}
-
-          {step > 0 && step < 3 && (
-            <button
-              onClick={goNext}
-              disabled={step === 2 && !parseResult?.success}
-              className="flex items-center gap-1 rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-600 disabled:opacity-40"
-            >
-              Next
-              {' '}
-              <ChevronRight size={14} />
-            </button>
-          )}
-        </div>
+        {step === 0 && (
+          <StepDescribe
+            preferences={preferences}
+            onPreferencesChange={setPreferences}
+            templates={savedTemplates}
+            onLoadTemplate={handleLoadTemplate}
+            onDeleteTemplate={handleDeleteTemplate}
+            onSkipToImport={handleSkipToImport}
+          />
+        )}
+        {step === 1 && (
+          <StepReview
+            prompt={prompt}
+            copied={copied}
+            onCopy={handleCopy}
+            canShare={canShare}
+            onShare={handleShare}
+          />
+        )}
+        {step === 2 && (
+          <StepImport
+            jsonInput={jsonInput}
+            onJsonInputChange={setJsonInput}
+            parseResult={parseResult}
+            onPaste={handlePaste}
+          />
+        )}
+        {step === 3 && curve && (
+          <StepPreview
+            curve={curve}
+            editablePoints={editablePoints}
+            tempRange={tempRange}
+            chartData={chartData}
+            onUpdatePoint={updatePoint}
+            onAddPoint={addPoint}
+            onRemovePoint={removePoint}
+            onSaveTemplate={handleSaveTemplate}
+            onApply={handleApply}
+          />
+        )}
       </div>
-    </>
+    </Sheet>
   )
 }
+
+const FIELD = 'block w-full rounded-xl bg-zinc-900 px-4 py-3 text-white placeholder:text-zinc-600 outline-none focus-visible:ring-2 focus-visible:ring-sky-500'
 
 function StepDescribe({
   preferences,
@@ -417,70 +380,74 @@ function StepDescribe({
   templates,
   onLoadTemplate,
   onDeleteTemplate,
+  onSkipToImport,
 }: {
   preferences: string
   onPreferencesChange: (v: string) => void
   templates: CurveTemplate[]
   onLoadTemplate: (t: CurveTemplate) => void
   onDeleteTemplate: (name: string) => void
+  onSkipToImport: () => void
 }) {
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="mb-2 text-xs text-zinc-400">
-          Describe your sleep preferences in natural language. An AI will design a personalized temperature curve.
-        </p>
+    <>
+      <ListSection footer="Describe how you sleep in your own words. You'll get a prompt to paste into ChatGPT, Claude or Gemini.">
         <textarea
           value={preferences}
           onChange={e => onPreferencesChange(e.target.value)}
-          placeholder="e.g., I run hot, bed at 11pm, wake at 6:30. Really cold first few hours..."
+          placeholder="I run hot, bed at 11pm, wake at 6:30. Really cold for the first few hours."
           rows={4}
-          className="w-full rounded-xl border border-zinc-800 bg-zinc-800/50 px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-cyan-500/50 focus:outline-none"
+          aria-label="Sleep preferences"
+          className={cn(FIELD, 'resize-none text-[17px] leading-[22px]')}
         />
-      </div>
+      </ListSection>
 
-      <div className="space-y-1.5">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Try an example</p>
+      <ListSection header="Examples">
         {EXAMPLE_SUGGESTIONS.map(suggestion => (
           <button
             key={suggestion}
+            type="button"
             onClick={() => onPreferencesChange(suggestion)}
-            className="block w-full rounded-lg border border-zinc-800 px-3 py-2 text-left text-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-300"
+            className="block w-full px-4 py-2.5 text-left text-[15px] leading-5 text-zinc-300 active:bg-zinc-800"
           >
             {suggestion}
           </button>
         ))}
-      </div>
+      </ListSection>
+
+      <ListSection footer="Already have a JSON response from an AI? Skip straight to import.">
+        <ListRow icon={ClipboardPaste} title="Import JSON" onClick={onSkipToImport} accessory={<ChevronRight size={18} className="shrink-0 text-zinc-600" />} />
+      </ListSection>
 
       {templates.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Saved Curves</p>
+        <ListSection header="Saved curves">
           {templates.map(t => (
-            <div key={t.name} className="flex items-center gap-2 rounded-lg border border-zinc-800 px-3 py-2">
+            <div key={t.name} className="flex min-h-[44px] items-center">
               <button
+                type="button"
                 onClick={() => onLoadTemplate(t)}
-                className="flex flex-1 items-center gap-2 text-left"
+                className="flex min-h-[44px] min-w-0 flex-1 items-center gap-3 pl-4 text-left active:bg-zinc-800"
               >
-                <span className="h-2 w-2 rounded-full bg-cyan-400" />
-                <span className="flex-1 text-xs font-medium text-zinc-300">{t.name}</span>
-                <span className="text-[10px] text-zinc-600">
+                <span className="min-w-0 flex-1 truncate text-[17px] text-white">{t.name}</span>
+                <span className="ios-numeric shrink-0 text-[15px] text-zinc-500">
                   {t.bedtime}
-                  {' '}
-                  →
+                  {' – '}
                   {t.wake}
                 </span>
               </button>
               <button
+                type="button"
                 onClick={() => onDeleteTemplate(t.name)}
-                className="flex h-6 w-6 items-center justify-center rounded text-zinc-600 hover:text-red-400"
+                aria-label={`Delete ${t.name}`}
+                className="flex h-11 w-11 shrink-0 items-center justify-center text-zinc-500 active:text-white"
               >
-                <X size={12} />
+                <X size={18} />
               </button>
             </div>
           ))}
-        </div>
+        </ListSection>
       )}
-    </div>
+    </>
   )
 }
 
@@ -498,59 +465,26 @@ function StepReview({
   onShare: () => void
 }) {
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-zinc-400">
-        {canShare
-          ? 'Share this prompt to ChatGPT, Claude, or Gemini. Then paste the JSON response in the next step.'
-          : 'Select and copy this prompt, then paste it into ChatGPT, Claude, or Gemini. Paste the JSON response in the next step.'}
-      </p>
+    <>
+      <ListSection
+        footer={canShare
+          ? 'Share this prompt to ChatGPT, Claude or Gemini, then paste the JSON response in the next step.'
+          : 'Copy this prompt into ChatGPT, Claude or Gemini, then paste the JSON response in the next step.'}
+      >
+        <div className="max-h-[40vh] overflow-y-auto px-4 py-3">
+          <pre id="ai-prompt-text" className="select-all whitespace-pre-wrap font-sans text-[13px] leading-[18px] text-zinc-300">{prompt}</pre>
+        </div>
+      </ListSection>
 
-      <div className="max-h-[40vh] overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-        <pre id="ai-prompt-text" className="whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-300 select-all">{prompt}</pre>
-      </div>
-
-      <div className="flex gap-2">
-        {canShare && (
-          <button
-            onClick={onShare}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-cyan-600 active:scale-[0.98]"
-          >
-            <Share2 size={16} />
-            {' '}
-            Share Prompt
-          </button>
-        )}
-
-        <button
+      <ListSection>
+        {canShare && <ListRow icon={Share2} title="Share Prompt" onClick={onShare} />}
+        <ListRow
+          icon={copied ? Check : Copy}
+          title={copied ? 'Copied' : canShare ? 'Copy Prompt' : 'Select All'}
           onClick={onCopy}
-          className={cn(
-            'flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition-all',
-            canShare ? 'border border-zinc-800 bg-zinc-800/50 text-zinc-400' : 'flex-1',
-            copied
-              ? 'bg-emerald-500/20 text-emerald-400'
-              : !canShare
-                  ? 'bg-cyan-500 text-white hover:bg-cyan-600 active:scale-[0.98]'
-                  : '',
-          )}
-        >
-          {copied
-            ? (
-                <>
-                  <Check size={16} />
-                  {' '}
-                  Selected!
-                </>
-              )
-            : (
-                <>
-                  <Copy size={16} />
-                  {' '}
-                  {canShare ? 'Copy' : 'Select All'}
-                </>
-              )}
-        </button>
-      </div>
-    </div>
+        />
+      </ListSection>
+    </>
   )
 }
 
@@ -566,59 +500,46 @@ function StepImport({
   onPaste: () => void
 }) {
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-zinc-400">
-        Paste the AI&apos;s JSON response below. It will be validated automatically.
-      </p>
-
-      <textarea
-        value={jsonInput}
-        onChange={e => onJsonInputChange(e.target.value)}
-        placeholder='{"name": "...", "bedtime": "22:00", "wake": "07:00", "points": {...}, "reasoning": "..."}'
-        rows={8}
-        className="w-full rounded-xl border border-zinc-800 bg-zinc-800/50 px-3 py-2.5 font-mono text-xs text-white placeholder:text-zinc-600 focus:border-cyan-500/50 focus:outline-none"
-      />
-
-      <button
-        onClick={onPaste}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-2.5 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-700"
-      >
-        <ClipboardPaste size={14} />
-        {' '}
-        Paste from Clipboard
-      </button>
-
-      {parseResult && (
-        parseResult.success
-          ? (
-              <div className="flex items-start gap-2 rounded-xl bg-emerald-500/10 px-3 py-2.5">
-                <Check size={14} className="mt-0.5 shrink-0 text-emerald-400" />
-                <div className="text-xs text-emerald-400">
-                  <span className="font-semibold">{parseResult.curve.name}</span>
-                  <span className="ml-1 text-emerald-400/70">
-                    —
-                    {' '}
+    <>
+      <ListSection
+        footer={parseResult
+          ? parseResult.success
+            ? (
+                <span className="flex items-start gap-1.5 text-emerald-400">
+                  <Check size={15} className="mt-px shrink-0" />
+                  <span>
+                    {parseResult.curve.name}
+                    {': '}
                     {Object.keys(parseResult.curve.points).length}
-                    {' '}
-                    set points,
-                    {' '}
+                    {' set points, '}
                     {parseResult.curve.bedtime}
-                    {' '}
-                    →
-                    {' '}
+                    {' – '}
                     {parseResult.curve.wake}
                   </span>
-                </div>
-              </div>
-            )
-          : (
-              <div className="flex items-start gap-2 rounded-xl bg-red-500/10 px-3 py-2.5">
-                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-red-400" />
-                <p className="text-xs text-red-400">{parseResult.error}</p>
-              </div>
-            )
-      )}
-    </div>
+                </span>
+              )
+            : (
+                <span className="flex items-start gap-1.5 text-red-400">
+                  <AlertTriangle size={15} className="mt-px shrink-0" />
+                  <span>{parseResult.error}</span>
+                </span>
+              )
+          : 'Paste the AI’s JSON response. It’s checked as you type.'}
+      >
+        <textarea
+          value={jsonInput}
+          onChange={e => onJsonInputChange(e.target.value)}
+          placeholder='{"name": "...", "bedtime": "22:00", "wake": "07:00", "points": {...}}'
+          rows={8}
+          aria-label="AI response JSON"
+          className={cn(FIELD, 'resize-none font-mono text-[13px] leading-[18px]')}
+        />
+      </ListSection>
+
+      <ListSection>
+        <ListRow icon={ClipboardPaste} title="Paste from Clipboard" onClick={onPaste} />
+      </ListSection>
+    </>
   )
 }
 
@@ -644,136 +565,78 @@ function StepPreview({
   onApply: () => void
 }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-white">{curve.name}</span>
-        <span className="rounded-full bg-zinc-800 px-2.5 py-1 text-[10px] font-medium text-zinc-400">
+    <>
+      <div className="px-1">
+        <h3 className="text-[22px] font-bold leading-7 text-white">{curve.name}</h3>
+        <p className="ios-numeric text-[15px] text-zinc-500">
           {curve.bedtime}
-          {' '}
-          →
+          {' – '}
           {curve.wake}
-        </span>
+        </p>
       </div>
 
       {chartData && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
-          <CurveChart
-            points={chartData.points}
-            bedtimeMinutes={chartData.bedtimeMinutes}
-            minTempF={tempRange.min}
-            maxTempF={tempRange.max}
-          />
-          <div className="mt-2">
+        <ListSection footer={curve.reasoning || undefined}>
+          <div className="space-y-2 pb-3 pl-1 pr-2 pt-3">
+            <CurveChart
+              points={chartData.points}
+              bedtimeMinutes={chartData.bedtimeMinutes}
+              minTempF={tempRange.min}
+              maxTempF={tempRange.max}
+            />
             <PhaseLegend />
           </div>
-        </div>
+        </ListSection>
       )}
 
-      {curve.reasoning && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-800/30 px-3 py-2.5">
-          <p className="text-[11px] leading-relaxed text-zinc-400">{curve.reasoning}</p>
-        </div>
-      )}
-
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-            Set Points (
-            {editablePoints.length}
-            )
-          </p>
-          <button
-            onClick={onAddPoint}
-            className="flex items-center gap-1 text-[10px] text-cyan-400"
-          >
-            <Plus size={10} />
-            {' '}
-            Add
-          </button>
-        </div>
-
-        <div className="max-h-[30vh] overflow-y-auto rounded-xl border border-zinc-800">
-          {editablePoints.map((point, idx) => (
-            <div
-              key={`${point.time}-${idx}`}
-              className={cn(
-                'flex items-center gap-2 px-3 py-2',
-                idx > 0 && 'border-t border-zinc-800/50',
-              )}
+      <ListSection header={`Set points (${editablePoints.length})`} footer="A curve needs at least three set points.">
+        {editablePoints.map((point, idx) => (
+          <div key={`${point.time}-${idx}`} className="flex min-h-[44px] items-center gap-2 py-1.5 pl-4 pr-1">
+            <input
+              type="time"
+              value={point.time}
+              onChange={e => onUpdatePoint(idx, 'time', e.target.value)}
+              aria-label={`Set point ${idx + 1} time`}
+              className="ios-numeric h-[34px] min-w-0 rounded-lg bg-zinc-800 px-2 text-[15px] text-white outline-none [color-scheme:dark]"
+            />
+            <span className="ios-numeric min-w-[44px] flex-1 text-right text-[17px]" style={{ color: tempTint(point.tempF) }}>
+              {point.tempF}
+              °
+            </span>
+            <Stepper
+              label={`set point ${idx + 1} temperature`}
+              onDecrement={() => onUpdatePoint(idx, 'tempF', point.tempF - 1)}
+              onIncrement={() => onUpdatePoint(idx, 'tempF', point.tempF + 1)}
+              decrementDisabled={point.tempF <= 55}
+              incrementDisabled={point.tempF >= 110}
+            />
+            <button
+              type="button"
+              onClick={() => onRemovePoint(idx)}
+              disabled={editablePoints.length <= 3}
+              aria-label={`Remove set point ${idx + 1}`}
+              className="flex h-11 w-9 shrink-0 items-center justify-center text-zinc-500 active:text-white disabled:text-zinc-700"
             >
-              <input
-                type="time"
-                value={point.time}
-                onChange={e => onUpdatePoint(idx, 'time', e.target.value)}
-                className="w-20 rounded bg-zinc-800 px-2 py-1 text-xs text-white [color-scheme:dark]"
-              />
+              <X size={18} />
+            </button>
+          </div>
+        ))}
+        <AddRow onClick={onAddPoint}>Add Set Point</AddRow>
+      </ListSection>
 
-              <div className="flex flex-1 items-center gap-2">
-                <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-zinc-800">
-                  <div
-                    className={cn(
-                      'absolute inset-y-0 left-0 rounded-full',
-                      point.tempF <= 74 ? 'bg-blue-500' : point.tempF <= 82 ? 'bg-violet-500' : 'bg-orange-500',
-                    )}
-                    style={{ width: `${((point.tempF - 55) / 55) * 100}%` }}
-                  />
-                </div>
-              </div>
+      <ListSection>
+        <ListRow icon={Save} title="Save as Template" onClick={onSaveTemplate} />
+      </ListSection>
 
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => onUpdatePoint(idx, 'tempF', point.tempF - 1)}
-                  className="flex h-6 w-6 items-center justify-center rounded bg-zinc-800 text-zinc-400"
-                >
-                  <Minus size={10} />
-                </button>
-                <span className={cn(
-                  'w-10 text-center text-xs font-medium tabular-nums',
-                  point.tempF <= 74 ? 'text-blue-400' : point.tempF <= 82 ? 'text-zinc-300' : 'text-orange-400',
-                )}
-                >
-                  {point.tempF}
-                  °
-                </span>
-                <button
-                  onClick={() => onUpdatePoint(idx, 'tempF', point.tempF + 1)}
-                  className="flex h-6 w-6 items-center justify-center rounded bg-zinc-800 text-zinc-400"
-                >
-                  <Plus size={10} />
-                </button>
-              </div>
-
-              <button
-                onClick={() => onRemovePoint(idx)}
-                disabled={editablePoints.length <= 3}
-                className="flex h-6 w-6 items-center justify-center text-zinc-600 hover:text-red-400 disabled:opacity-30"
-              >
-                <Trash2 size={10} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          onClick={onSaveTemplate}
-          className="flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-800/50 px-4 py-3 text-xs font-medium text-zinc-400 transition-colors hover:border-zinc-700"
-        >
-          <Save size={14} />
-          {' '}
-          Save
-        </button>
-
-        <button
-          onClick={onApply}
-          disabled={editablePoints.length < 3}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-cyan-600 active:scale-[0.98] disabled:opacity-60"
-        >
-          Use Curve
-        </button>
-      </div>
-    </div>
+      <button
+        type="button"
+        onClick={onApply}
+        disabled={editablePoints.length < 3}
+        className="h-[50px] w-full rounded-xl bg-sky-500 text-[17px] font-semibold text-white active:bg-sky-600 disabled:opacity-40"
+      >
+        Use Curve
+      </button>
+    </>
   )
 }
 

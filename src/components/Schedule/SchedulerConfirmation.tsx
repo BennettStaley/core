@@ -10,8 +10,8 @@ interface SchedulerConfirmationProps {
 }
 
 /**
- * Fixed snackbar at the top of the viewport.
- * Slides in when a message is present, auto-dismisses via parent timer.
+ * Capsule toast at the top of the viewport (like the iOS AirPods / silent-mode
+ * HUD). Slides in when a message is present, auto-dismisses via parent timer.
  */
 export function SchedulerConfirmation({
   message,
@@ -23,26 +23,22 @@ export function SchedulerConfirmation({
   return (
     <div
       className={cn(
-        'fixed left-0 right-0 top-0 z-50 flex justify-center transition-transform duration-300',
-        visible ? 'translate-y-0' : '-translate-y-full',
+        'pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center transition-transform duration-300',
+        visible ? 'translate-y-0' : '-translate-y-[150%]',
       )}
+      style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 0.75rem)' }}
     >
       <div
-        className={cn(
-          'mx-4 mt-3 flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm shadow-lg backdrop-blur-sm',
-          variant === 'success' && 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20',
-          variant === 'error' && 'bg-red-500/20 text-red-400 border border-red-500/20',
-          variant === 'info' && 'bg-sky-500/20 text-sky-400 border border-sky-500/20',
-        )}
+        className="mx-4 flex max-w-full items-center gap-2 rounded-full bg-zinc-800/95 px-4 py-2.5 text-[15px] text-white backdrop-blur-xl"
         role="status"
         aria-live="polite"
       >
         {isLoading
-          ? <Loader2 size={16} className="animate-spin" />
+          ? <Loader2 size={17} className="shrink-0 animate-spin text-zinc-400" />
           : variant === 'error'
-            ? <AlertCircle size={16} />
-            : <CheckCircle size={16} />}
-        <span>{isLoading ? 'Saving...' : message}</span>
+            ? <AlertCircle size={17} className="shrink-0 text-red-400" />
+            : <CheckCircle size={17} className={cn('shrink-0', variant === 'info' ? 'text-sky-400' : 'text-emerald-400')} />}
+        <span className="truncate">{isLoading ? 'Saving…' : message}</span>
       </div>
     </div>
   )

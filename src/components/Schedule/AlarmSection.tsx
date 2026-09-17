@@ -1,12 +1,12 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
-import { Plus, Bell } from 'lucide-react'
 import { trpc } from '@/src/utils/trpc'
+import { ListSection } from '@/src/ui/ios'
 import type { DayOfWeek } from './DaySelector'
 import { AlarmCard, type AlarmGroup } from './AlarmCard'
 import { AlarmEditor } from './AlarmEditor'
-import { ConfirmDialog } from './ConfirmDialog'
+import { AddRow } from './EditorRows'
 
 type Side = 'left' | 'right'
 type Pattern = 'rise' | 'double'
@@ -28,7 +28,7 @@ const DAY_ORDER: DayOfWeek[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thu
 /**
  * Group alarm_schedules rows that share every field except day-of-week.
  * Rows are bucketed by a deterministic signature so "wake at 7am Mon–Fri" renders
- * as one card backed by five row ids.
+ * as one row backed by five row ids.
  */
 function groupAlarms(rows: AlarmRow[]): AlarmGroup[] {
   const buckets = new Map<string, AlarmGroup>()
@@ -72,9 +72,10 @@ interface AlarmSectionProps {
 }
 
 /**
- * Alarms list + editor section. Lives on the schedule page below temperature curves.
- * Reads `schedules.getAll.alarm`, groups identical rows across days into single cards,
- * and routes create/edit through `AlarmEditor`.
+ * Alarms group on the schedule page, below the curves. Reads
+ * `schedules.getAll.alarm`, groups identical rows across days into single
+ * rows, toggles enabled in place and routes create/edit/test/delete through
+ * `AlarmEditor`.
  */
 export function AlarmSection({ side }: AlarmSectionProps) {
   const { data, isLoading } = trpc.schedules.getAll.useQuery({ side })
@@ -82,12 +83,10 @@ export function AlarmSection({ side }: AlarmSectionProps) {
 
   const [editing, setEditing] = useState<AlarmGroup | null>(null)
   const [creating, setCreating] = useState(false)
-  const [pendingDelete, setPendingDelete] = useState<AlarmGroup | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [testingId, setTestingId] = useState<string | null>(null)
+  const [togglingKey, setTogglingKey] = useState<string | null>(null)
+  const [toggleError, setToggleError] = useState<string | null>(null)
 
   const batchUpdate = trpc.schedules.batchUpdate.useMutation()
-  const setAlarm = trpc.device.setAlarm.useMutation()
 
   const groups = useMemo<AlarmGroup[]>(() => {
     const alarms = (data?.alarm ?? []) as AlarmRow[]
@@ -109,96 +108,49 @@ export function AlarmSection({ side }: AlarmSectionProps) {
     setCreating(false)
   }, [])
 
-  const handleTest = useCallback((group: AlarmGroup) => {
-    const id = group.ids.join(',')
-    setTestingId(id)
-    setAlarm.mutate(
-      {
-        side,
-        vibrationIntensity: group.vibrationIntensity,
-        vibrationPattern: group.vibrationPattern,
-        duration: group.duration,
-      },
-      { onSettled: () => setTestingId(null) },
-    )
-  }, [setAlarm, side])
-
-  const confirmDelete = useCallback(async () => {
-    if (!pendingDelete) return
-    setDeleteError(null)
+  const handleToggle = useCallback(async (group: AlarmGroup, enabled: boolean) => {
+    const key = group.ids.join(',')
+    setTogglingKey(key)
+    setToggleError(null)
     try {
       await batchUpdate.mutateAsync({
-        deletes: { alarm: pendingDelete.ids },
+        updates: { alarm: group.ids.map(id => ({ id, enabled })) },
       })
-      void utils.schedules.getAll.invalidate()
+      await utils.schedules.getAll.invalidate()
       void utils.schedules.getByDay.invalidate()
-      setPendingDelete(null)
     }
     catch (err) {
-      // Keep the dialog open so the user can retry or cancel. Surface the failure
-      // in a banner — silently closing the dialog after a failed delete leaves the
-      // alarm row visible but with no signal to the user that the delete didn't take.
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete alarm')
+      setToggleError(err instanceof Error ? err.message : 'Failed to update alarm')
     }
-  }, [pendingDelete, batchUpdate, utils])
+    finally {
+      setTogglingKey(null)
+    }
+  }, [batchUpdate, utils])
 
-  const cancelDelete = useCallback(() => {
-    setPendingDelete(null)
-    setDeleteError(null)
-  }, [])
+  const footer = toggleError
+    ? <span className="text-red-400">{`Couldn't update alarm: ${toggleError}`}</span>
+    : groups.length === 0 && !isLoading
+      ? 'The cover vibrates to wake you at the time you set.'
+      : undefined
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
-          <Bell size={11} />
-          Alarms
-        </p>
-      </div>
-
-      {isLoading && !data && (
-        <div className="h-20 animate-pulse rounded-2xl bg-zinc-900" />
-      )}
-
-      {!isLoading && groups.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-amber-500/30 bg-amber-500/5 p-5 text-center">
-          <p className="text-sm font-medium text-white">No alarms yet</p>
-          <p className="mt-1 text-xs text-zinc-400">
-            Set a wake-up alarm — the cover buzzes you awake.
-          </p>
-          <button
-            onClick={handleCreate}
-            className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-xl bg-amber-500 px-4 text-sm font-semibold text-zinc-950 active:bg-amber-600"
-          >
-            <Plus size={14} />
-            Add alarm
-          </button>
-        </div>
-      )}
-
-      {groups.length > 0 && (
-        <>
-          <div className="space-y-2">
-            {groups.map(group => (
-              <AlarmCard
-                key={group.ids.join(',')}
-                group={group}
-                onEdit={() => handleEdit(group)}
-                onDelete={() => setPendingDelete(group)}
-                onTest={() => handleTest(group)}
-                isTesting={testingId === group.ids.join(',')}
-              />
-            ))}
-          </div>
-          <button
-            onClick={handleCreate}
-            className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-700 text-sm font-medium text-zinc-400 active:bg-zinc-900"
-          >
-            <Plus size={14} />
-            Add another alarm
-          </button>
-        </>
-      )}
+    <>
+      <ListSection header="Alarms" footer={footer}>
+        {isLoading && !data && <div className="h-[88px] animate-pulse" />}
+        {groups.map((group) => {
+          const key = group.ids.join(',')
+          return (
+            <AlarmCard
+              key={key}
+              group={group}
+              onEdit={() => handleEdit(group)}
+              onToggle={enabled => void handleToggle(group, enabled)}
+              isToggling={togglingKey === key}
+            />
+          )
+        })}
+        <AddRow onClick={handleCreate}>Add Alarm</AddRow>
+      </ListSection>
 
       <AlarmEditor
         open={creating || editing !== null}
@@ -206,20 +158,6 @@ export function AlarmSection({ side }: AlarmSectionProps) {
         side={side}
         existingGroup={editing}
       />
-
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        title="Delete alarm?"
-        message={
-          deleteError
-            ? `Couldn't delete: ${deleteError}. Try again, or cancel.`
-            : `This will remove the alarm for ${pendingDelete?.days.length === 7 ? 'every day' : `${pendingDelete?.days.length ?? 0} day${(pendingDelete?.days.length ?? 0) === 1 ? '' : 's'}`}. The cover will no longer buzz at this time.`
-        }
-        confirmLabel={deleteError ? 'Retry' : 'Delete'}
-        variant="danger"
-        onConfirm={() => void confirmDelete()}
-        onCancel={cancelDelete}
-      />
-    </div>
+    </>
   )
 }
