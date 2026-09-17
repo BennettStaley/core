@@ -52,13 +52,13 @@ function ZoneBars({ pct, vals, peak }: { pct: number[], vals: number[], peak: nu
         return (
           <div
             key={z.i}
-            className="relative h-9 overflow-hidden rounded-md border"
-            style={{ borderColor: isPeak ? 'var(--accent)' : 'rgba(63,63,70,0.5)' }}
+            className="relative h-11 overflow-hidden rounded-lg border"
+            style={{ borderColor: isPeak ? 'var(--accent)' : 'transparent' }}
           >
             <div className="absolute inset-0" style={{ background: 'var(--accent)', opacity: 0.06 + Math.min(pct[i] ?? 0, 1) * 0.5 }} />
             <div className="absolute inset-0 flex items-center justify-between px-2.5">
-              <span className="text-[11px] text-zinc-200">{z.label}</span>
-              <span className="mono text-[10px] text-zinc-400">{(vals[i] ?? 0).toFixed(2)}</span>
+              <span className="text-[15px] text-white">{z.label}</span>
+              <span className="ios-numeric text-[13px] text-zinc-400">{(vals[i] ?? 0).toFixed(2)}</span>
             </div>
           </div>
         )
@@ -96,10 +96,10 @@ function LiveZones({ side }: { side: 'left' | 'right' | 'both' }) {
   return (
     <>
       <div className="mb-2 flex justify-end">
-        {frame && <span className="mono text-[10px] text-zinc-600">{frame.ts ? fmtClock(frame.ts * 1000) : '--'}</span>}
+        {frame && <span className="ios-numeric text-[13px] text-zinc-500">{frame.ts ? fmtClock(frame.ts * 1000) : '--'}</span>}
       </div>
       {!frame
-        ? <div className="grid h-24 place-items-center text-[12px] text-zinc-600">Waiting for live capacitive data…</div>
+        ? <div className="grid h-24 place-items-center text-[15px] text-zinc-500">Waiting for live capacitive data…</div>
         : (
             <div className="flex gap-3">
               {sides.map((s) => {
@@ -107,14 +107,14 @@ function LiveZones({ side }: { side: 'left' | 'right' | 'both' }) {
                 const peak = act.indexOf(Math.max(...act))
                 return (
                   <div key={s} className="flex-1">
-                    <div className="mb-1.5 text-center text-[10px] uppercase tracking-wide text-zinc-500">{s}</div>
+                    <div className="mb-1.5 text-center text-[13px] capitalize text-zinc-500">{s}</div>
                     <ZoneBars pct={act.map(a => a / NORMALIZE)} vals={act} peak={act.some(a => a > 0.02) ? peak : -1} />
                   </div>
                 )
               })}
             </div>
           )}
-      <div className="mt-3 text-[11px] leading-relaxed text-zinc-600">
+      <div className="mt-3 text-[13px] leading-[18px] text-zinc-500">
         Live capacitive presence — body-contact load across head/torso/legs (not temperature). Brighter = more contact; the outlined band is the most-active zone.
       </div>
     </>
@@ -150,10 +150,10 @@ function ReplayZones({ side, nightId }: { side: 'left' | 'right', nightId: numbe
   )
 
   if (q.isLoading && frames.length === 0) {
-    return <div className="grid h-24 place-items-center text-[12px] text-zinc-600">Loading replay…</div>
+    return <div className="grid h-24 place-items-center text-[15px] text-zinc-500">Loading replay…</div>
   }
   if (frames.length === 0) {
-    return <div className="grid h-24 place-items-center text-center text-[12px] text-zinc-600">No spatial presence history for this night.</div>
+    return <div className="grid h-24 place-items-center text-center text-[15px] text-zinc-500">No spatial presence history for this night.</div>
   }
 
   const cur = frames[clamped]
@@ -168,11 +168,11 @@ function ReplayZones({ side, nightId }: { side: 'left' | 'right', nightId: numbe
           onClick={() => setPlaying(p => !p)}
           aria-label={playing ? 'Pause replay' : 'Play replay'}
           aria-pressed={playing}
-          className="grid h-6 w-6 place-items-center rounded text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+          className="-ml-2 grid h-11 w-11 place-items-center rounded-lg text-sky-400 active:opacity-50"
         >
-          {playing ? <Icon.Pause size={13} /> : <Icon.Play size={13} />}
+          {playing ? <Icon.Pause size={18} /> : <Icon.Play size={18} />}
         </button>
-        <span className="mono text-[10px] text-zinc-600">{`${fmtClock(cur.tMs)} · ${clamped + 1}/${frames.length}`}</span>
+        <span className="ios-numeric text-[13px] text-zinc-500">{`${fmtClock(cur.tMs)} · ${clamped + 1}/${frames.length}`}</span>
       </div>
       <input
         type="range"
@@ -187,10 +187,10 @@ function ReplayZones({ side, nightId }: { side: 'left' | 'right', nightId: numbe
         className="mb-3 w-full accent-[var(--accent)]"
       />
       <div className="mx-auto max-w-[200px]">
-        <div className="mb-1.5 text-center text-[10px] uppercase tracking-wide text-zinc-500">{side}</div>
+        <div className="mb-1.5 text-center text-[13px] capitalize text-zinc-500">{side}</div>
         <ZoneBars pct={vals.map(v => v / scale)} vals={vals} peak={peak} />
       </div>
-      <div className="mt-3 text-[11px] leading-relaxed text-zinc-600">
+      <div className="mt-3 text-[13px] leading-[18px] text-zinc-500">
         Replaying recorded zone loads for the backtested night (~5s windows). Scrub or play to see where contact sat over the night.
       </div>
     </>
@@ -205,9 +205,9 @@ export function CapZoneViz({ side, backtestSide, nightId }: { side: 'left' | 'ri
   return (
     <Card className="p-4">
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon.Activity size={13} className="text-zinc-500" />
-          <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{`Bed pressure · ${active === 'replay' ? 'night replay' : 'live zones'}`}</span>
+        <div className="min-w-0">
+          <div className="text-[17px] font-semibold leading-[22px] text-white">Bed pressure</div>
+          <div className="text-[13px] leading-[18px] text-zinc-500">{active === 'replay' ? 'Night replay' : 'Live zones'}</div>
         </div>
         {canReplay && (
           <Segmented

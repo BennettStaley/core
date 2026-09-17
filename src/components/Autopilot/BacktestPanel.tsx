@@ -7,7 +7,7 @@
  */
 'use client'
 
-import { Icon } from './icons'
+import { useEffect, useState } from 'react'
 
 import type { BacktestResult } from '@/src/automation/backtest'
 
@@ -23,43 +23,63 @@ function minToClock(m: number): string {
 }
 
 function Stat({ label, value, tone = 'zinc' }: { label: string, value: string, tone?: 'zinc' | 'red' | 'accent' }) {
-  const color = tone === 'red' ? '#f87171' : tone === 'accent' ? 'var(--accent)' : '#e4e4e7'
+  const color = tone === 'red' ? 'text-red-400' : tone === 'accent' ? 'text-sky-400' : 'text-white'
   return (
-    <div className="rounded-lg border border-zinc-800/70 bg-zinc-900/40 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-[0.1em] text-zinc-500">{label}</div>
-      <div className="mono text-[15px] font-medium mt-0.5" style={{ color }}>{value}</div>
+    <div className="flex min-h-[40px] min-w-0 items-center justify-between gap-3 px-3 py-2 sm:block sm:rounded-lg sm:bg-zinc-800/60">
+      <div className="truncate text-[13px] leading-[18px] text-zinc-500">{label}</div>
+      <div className={`ios-numeric truncate text-[15px] font-semibold sm:mt-0.5 sm:text-[17px] ${color}`}>{value}</div>
     </div>
   )
 }
 
 function NightPicker({ nights, nightId, onNight }: { nights: NightOption[], nightId: number | null, onNight: (id: number) => void }) {
   return (
-    <div className="flex items-center gap-1 flex-wrap">
+    <div className="no-scrollbar -mx-4 flex items-center gap-1.5 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
       {nights.map(n => (
         <button
           key={n.sleepRecordId}
           type="button"
           onClick={() => onNight(n.sleepRecordId)}
-          style={n.sleepRecordId === nightId ? { background: 'color-mix(in srgb, var(--accent) 16%, transparent)', color: 'var(--accent)', borderColor: 'color-mix(in srgb, var(--accent) 30%, transparent)' } : undefined}
-          className={`rounded-md border px-2 py-1 text-[12px] transition-colors ${n.sleepRecordId === nightId ? '' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'}`}
+          aria-pressed={n.sleepRecordId === nightId}
+          className={`min-h-[32px] shrink-0 whitespace-nowrap rounded-full px-3 text-[13px] transition-colors ${n.sleepRecordId === nightId ? 'bg-sky-500 font-semibold text-white' : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700'}`}
         >
           {n.label}
           {' '}
-          <span className="text-[10px] opacity-60">{n.date}</span>
+          <span className="opacity-70">{n.date}</span>
         </button>
       ))}
     </div>
   )
 }
 
+/** Measures its box so the SVG is drawn 1:1 in CSS pixels (legible 11px labels on phones). */
+function useBoxWidth(fallback: number) {
+  const [width, setWidth] = useState(fallback)
+  const [node, setNode] = useState<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!node) return
+    const update = () => setWidth(Math.max(260, Math.round(node.clientWidth)))
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(node)
+    return () => ro.disconnect()
+  }, [node])
+  return [setNode, width] as const
+}
+
 function Chart({ r }: { r: BacktestResult }) {
+  const [ref, width] = useBoxWidth(660)
+  return <div ref={ref}><ChartSvg r={r} W={width} /></div>
+}
+
+function ChartSvg({ r, W }: { r: BacktestResult, W: number }) {
   const N = r.clockMin.length
-  if (N < 2) return <div className="text-[12px] text-zinc-500 px-2 py-8 text-center">Not enough data in this window to replay.</div>
+  if (N < 2) return <div className="px-2 py-8 text-center text-[15px] text-zinc-500">Not enough data in this window to replay.</div>
 
   // Policy overlays ambient + setpoint on one shared temperature scale.
   const policy = r.mode === 'policy'
 
-  const W = 660, mL = 38, mR = 42, mT = 14
+  const mL = 34, mR = 36, mT = 14
   const iw = W - mL - mR
   // Edge mode reserves a dedicated event rail beneath the plot so the plot
   // itself stays clean at any event density; policy keeps the original layout.
@@ -119,7 +139,8 @@ function Chart({ r }: { r: BacktestResult }) {
   })()
 
   // time ticks at ~6 even index positions
-  const tickIdx = Array.from({ length: 6 }, (_, k) => Math.round((k / 5) * (N - 1)))
+  const tickCount = W < 480 ? 4 : 6
+  const tickIdx = Array.from({ length: tickCount }, (_, k) => Math.round((k / (tickCount - 1)) * (N - 1)))
 
   // Collapse consecutive suppressed indices into cooldown runs so a dense
   // burst reads as a single band rather than N stacked marks (edge only).
@@ -144,15 +165,15 @@ function Chart({ r }: { r: BacktestResult }) {
   })()
 
   return (
-    <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/60 p-2">
+    <div>
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
         {[0, 0.25, 0.5, 0.75, 1].map((g, i) => (
-          <line key={i} x1={mL} x2={W - mR} y1={mT + ih * g} y2={mT + ih * g} stroke="#1c1c20" strokeWidth="1" />
+          <line key={i} x1={mL} x2={W - mR} y1={mT + ih * g} y2={mT + ih * g} stroke="#2C2C2E" strokeWidth="1" />
         ))}
         {tickIdx.map((idx, i) => (
           <g key={i}>
-            <line x1={x(idx)} x2={x(idx)} y1={mT} y2={mT + ih} stroke="#18181b" strokeWidth="1" />
-            <text x={x(idx)} y={labelY} textAnchor="middle" className="mono" style={{ fontSize: 9, fill: '#71717a' }}>{minToClock(r.clockMin[idx])}</text>
+            <line x1={x(idx)} x2={x(idx)} y1={mT} y2={mT + ih} stroke="#242426" strokeWidth="1" />
+            <text x={x(idx)} y={labelY} textAnchor="middle" className="mono" style={{ fontSize: 11, fill: '#8E8E93' }}>{minToClock(r.clockMin[idx])}</text>
           </g>
         ))}
 
@@ -202,7 +223,7 @@ function Chart({ r }: { r: BacktestResult }) {
         {!policy && r.threshold != null && r.primaryAxis && (
           <>
             <line x1={mL} x2={W - mR} y1={yPrimary(r.threshold)} y2={yPrimary(r.threshold)} stroke="#ef4444" strokeWidth="1.2" strokeDasharray="4 3" opacity="0.6" />
-            <text x={W - mR + 3} y={yPrimary(r.threshold) + 3} className="mono" style={{ fontSize: 9, fill: '#ef4444' }}>{r.threshold}</text>
+            <text x={W - mR + 3} y={yPrimary(r.threshold) + 3} className="mono" style={{ fontSize: 11, fill: '#ef4444' }}>{r.threshold}</text>
           </>
         )}
 
@@ -227,7 +248,7 @@ function Chart({ r }: { r: BacktestResult }) {
         {/* event rail — carries all event density so the plot stays clean (edge) */}
         {!policy && (
           <g>
-            <rect x={mL} y={railTop} width={iw} height={railH} rx={3} fill="#141417" stroke="#26262b" strokeWidth="1" />
+            <rect x={mL} y={railTop} width={iw} height={railH} rx={3} fill="#2C2C2E" stroke="none" strokeWidth="1" />
             {r.suppressed.map((i, k) => (
               <line key={`rs${k}`} x1={x(i)} x2={x(i)} y1={railTop + 3.5} y2={railBottom - 3.5} stroke="#52525b" strokeWidth="1" opacity="0.8" />
             ))}
@@ -240,15 +261,15 @@ function Chart({ r }: { r: BacktestResult }) {
         {/* axes labels */}
         {!policy && r.primaryAxis && (
           <>
-            <text x={mL - 5} y={yPrimary(r.primaryAxis.max) + 3} textAnchor="end" className="mono" style={{ fontSize: 9, fill: '#52525b' }}>{Math.round(r.primaryAxis.max)}</text>
-            <text x={mL - 5} y={yPrimary(r.primaryAxis.min) - 1} textAnchor="end" className="mono" style={{ fontSize: 9, fill: '#52525b' }}>{Math.round(r.primaryAxis.min)}</text>
+            <text x={mL - 5} y={yPrimary(r.primaryAxis.max) + 3} textAnchor="end" className="mono" style={{ fontSize: 11, fill: '#8E8E93' }}>{Math.round(r.primaryAxis.max)}</text>
+            <text x={mL - 5} y={yPrimary(r.primaryAxis.min) - 1} textAnchor="end" className="mono" style={{ fontSize: 11, fill: '#8E8E93' }}>{Math.round(r.primaryAxis.min)}</text>
           </>
         )}
-        <text x={W - mR + 3} y={yTemp(policy ? sharedMax : tempA.max) + 8} className="mono" style={{ fontSize: 9, fill: 'var(--accent)' }}>
+        <text x={W - mR + 3} y={yTemp(policy ? sharedMax : tempA.max) + 8} className="mono" style={{ fontSize: 11, fill: 'var(--accent)' }}>
           {Math.round(policy ? sharedMax : tempA.max)}
           °
         </text>
-        <text x={W - mR + 3} y={yTemp(policy ? sharedMin : tempA.min)} className="mono" style={{ fontSize: 9, fill: 'var(--accent)' }}>
+        <text x={W - mR + 3} y={yTemp(policy ? sharedMin : tempA.min)} className="mono" style={{ fontSize: 11, fill: 'var(--accent)' }}>
           {Math.round(policy ? sharedMin : tempA.min)}
           °
         </text>
@@ -276,23 +297,20 @@ export function BacktestPanel({
   const r = result
   return (
     <div>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <Icon.Flask size={14} className="text-zinc-500" />
-          <span className="text-[12px] font-semibold tracking-[0.12em] uppercase text-zinc-400">
-            Backtest
-            {r ? (r.mode === 'policy' ? ' · policy' : ' · edge') : ''}
-          </span>
+      <div className="mb-3 space-y-2 md:flex md:flex-wrap md:items-center md:justify-between md:gap-2 md:space-y-0">
+        <div className="flex items-baseline gap-2">
+          <span className="text-[17px] font-semibold text-white">Backtest</span>
+          {r && <span className="text-[13px] text-zinc-500">{r.mode === 'policy' ? 'Continuous policy' : 'Edge-triggered'}</span>}
         </div>
         <NightPicker nights={nights} nightId={nightId} onNight={onNight} />
       </div>
 
-      {loading && <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/60 p-2 h-[160px] grid place-items-center text-[12px] text-zinc-600">Replaying…</div>}
-      {!loading && message && <div className="rounded-lg border border-zinc-800/70 bg-zinc-900/40 p-4 text-[12px] text-zinc-500">{message}</div>}
+      {loading && <div className="grid h-[180px] place-items-center text-[15px] text-zinc-500">Replaying…</div>}
+      {!loading && message && <div className="py-6 text-center text-[15px] leading-5 text-zinc-500">{message}</div>}
       {!loading && !message && r && (
         <>
           <Chart r={r} />
-          <div className="mt-3 flex items-center gap-3 flex-wrap text-[11px] text-zinc-400">
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-zinc-500">
             {r.avg && <Legend swatch={r.mode === 'edge' ? '#fafafa' : '#d4d4d8'}>{r.avg.label}</Legend>}
             {r.primary && <Legend swatch="#3f3f46">{r.mode === 'policy' ? r.primary.label.toLowerCase() : `raw ${r.primary.label.toLowerCase()}`}</Legend>}
             {r.mode === 'policy' && r.setpointRaw && <Legend dashed swatch="#52525b">pre-clamp</Legend>}
@@ -306,7 +324,7 @@ export function BacktestPanel({
               </>
             )}
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="mt-3 overflow-hidden rounded-lg bg-zinc-800/60 sm:grid sm:grid-cols-3 sm:gap-2 sm:bg-transparent [&>*+*]:border-t [&>*+*]:border-zinc-700/50 sm:[&>*+*]:border-t-0">
             {r.mode === 'policy'
               ? (
                   <>

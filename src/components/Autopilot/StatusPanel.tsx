@@ -1,13 +1,14 @@
 /**
  * Diagnostics / status panel — live Autopilot state and the audit trail. Global
- * kill-switch, a per-rule card (status, last fire, fires today, dry-run toggle),
+ * kill-switch, a per-rule group (status, last fire, fires today, dry-run switch),
  * and the run log: every evaluation that mattered, which is the transparency
  * Eight Sleep's black box lacks.
  */
 'use client'
 
+import type { ReactNode } from 'react'
 import { Icon } from './icons'
-import { Badge, Card, SideBadge, StatusBadge, Toggle } from './primitives'
+import { Badge, SideBadge, StatusBadge, Toggle } from './primitives'
 import { formatSetpointF } from '@/src/lib/tempUtils'
 
 export interface RuleStatus {
@@ -62,6 +63,11 @@ function verdictTone(v: RunRow['outcome']): 'red' | 'zinc' | 'amber' {
   return 'zinc'
 }
 
+function verdictLabel(v: RunRow['outcome']): string {
+  const s = v.replace('_', ' ')
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
 interface ActionDetail { kind?: string, side?: string, temp?: number, on?: boolean, sent?: boolean, dryRun?: boolean, clamped?: boolean, antiThrash?: boolean, skipped?: string, notified?: boolean }
 function actionText(detail: unknown): string {
   if (!detail || typeof detail !== 'object') return ''
@@ -79,87 +85,99 @@ function actionText(detail: unknown): string {
   return a.kind ?? ''
 }
 
+function GroupHeader({ children }: { children: ReactNode }) {
+  return <h2 className="px-4 text-[13px] leading-[18px] text-zinc-500">{children}</h2>
+}
+
+function ValueRow({ label, value }: { label: string, value: ReactNode }) {
+  return (
+    <div className="flex min-h-[44px] items-center justify-between gap-3 px-4">
+      <span className="text-[17px] text-white">{label}</span>
+      <span className="ios-numeric truncate text-right text-[17px] text-zinc-500">{value}</span>
+    </div>
+  )
+}
+
 function RuleStatusCard({ a, onDry }: { a: RuleStatus, onDry: (id: number, dryRun: boolean) => void }) {
   return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-[14px] font-medium text-zinc-100">{a.name}</span>
-            <SideBadge side={a.side} />
-          </div>
-          <div className="mt-1"><StatusBadge mode={statusMode(a)} /></div>
-        </div>
-        <label className="flex items-center gap-2 text-[11px] text-zinc-500 shrink-0">
-          <Toggle size="sm" checked={a.dryRun} onChange={() => onDry(a.id, !a.dryRun)} />
-          dry-run
-        </label>
-      </div>
-
-      <div className="rounded-lg border border-zinc-800/70 bg-zinc-950/50 p-3">
-        <div className="flex items-baseline justify-between">
-          <span className="text-[11px] uppercase tracking-[0.1em] text-zinc-500">Last outcome</span>
-          <span className="mono text-[13px] text-zinc-300">{a.lastOutcome ?? '—'}</span>
-        </div>
-        <div className="mt-1 text-[11px] text-zinc-500">{a.cooldownMin ? `cooldown ${a.cooldownMin}m` : 'no cooldown'}</div>
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.1em] text-zinc-600">Last fired</div>
-          <div className="mono text-zinc-300">{ago(a.lastFiredAt)}</div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.1em] text-zinc-600">Today</div>
-          <div className="mono text-zinc-300">
-            {a.firesToday}
-            {' '}
-            fire
-            {a.firesToday === 1 ? '' : 's'}
-          </div>
+    <div className="overflow-hidden rounded-xl bg-zinc-900 [&>*+*]:border-t [&>*+*]:border-zinc-800">
+      <div className="px-4 py-3">
+        <div className="truncate text-[17px] font-semibold leading-[22px] text-white">{a.name}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3">
+          <StatusBadge mode={statusMode(a)} />
+          <SideBadge side={a.side} />
         </div>
       </div>
-    </Card>
+      <div className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-1.5">
+        <span className="text-[17px] text-white">Dry run</span>
+        <Toggle checked={a.dryRun} onChange={() => onDry(a.id, !a.dryRun)} aria-label={`${a.name} dry run`} />
+      </div>
+      <ValueRow label="Last outcome" value={a.lastOutcome ?? '—'} />
+      <ValueRow label="Last fired" value={ago(a.lastFiredAt)} />
+      <ValueRow label="Today" value={`${a.firesToday} fire${a.firesToday === 1 ? '' : 's'}`} />
+      <ValueRow label="Cooldown" value={a.cooldownMin ? `${a.cooldownMin} min` : 'None'} />
+    </div>
   )
 }
 
 function RunLog({ runs }: { runs: RunRow[] }) {
   return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Icon.List size={14} className="text-zinc-500" />
-          <span className="text-[13px] font-medium text-zinc-200">Run log</span>
-          <span className="text-[11px] text-zinc-600">every evaluation that mattered</span>
-        </div>
-        <Badge tone="zinc">audit trail</Badge>
-      </div>
-      <div className="max-h-[420px] overflow-y-auto">
-        <table className="w-full text-left">
-          <thead className="sticky top-0 bg-zinc-950/90 backdrop-blur">
-            <tr className="text-[10px] uppercase tracking-[0.1em] text-zinc-600">
-              <th className="px-4 py-2 font-medium">Time</th>
-              <th className="px-2 py-2 font-medium">Rule</th>
-              <th className="px-2 py-2 font-medium">Verdict</th>
-              <th className="px-4 py-2 font-medium">Action / reason</th>
-            </tr>
-          </thead>
-          <tbody>
-            {runs.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-[12px] text-zinc-600">No evaluations recorded yet.</td></tr>
-            )}
+    <section className="space-y-1.5">
+      <GroupHeader>Run log</GroupHeader>
+      <div className="overflow-hidden rounded-xl bg-zinc-900">
+        {runs.length === 0 && (
+          <div className="flex flex-col items-center px-6 py-10 text-center">
+            <Icon.List size={28} className="mb-2 text-zinc-600" />
+            <div className="text-[17px] font-semibold text-white">No evaluations yet</div>
+            <div className="mt-1 text-[15px] leading-5 text-zinc-500">Every evaluation that fires, skips or gets clamped shows up here.</div>
+          </div>
+        )}
+
+        {/* phone: list rows */}
+        {runs.length > 0 && (
+          <div className="max-h-[520px] overflow-y-auto md:hidden [&>*+*]:border-t [&>*+*]:border-zinc-800">
             {runs.map(r => (
-              <tr key={r.id} className="border-t border-zinc-800/50 hover:bg-zinc-900/40">
-                <td className="px-4 py-2.5 mono text-[12px] text-zinc-400 whitespace-nowrap">{hhmm(r.firedAt)}</td>
-                <td className="px-2 py-2.5 text-[12px] text-zinc-200">{r.ruleName ?? `#${r.automationId}`}</td>
-                <td className="px-2 py-2.5"><Badge tone={verdictTone(r.outcome)} dot={r.outcome === 'fired'}>{r.outcome.replace('_', '-')}</Badge></td>
-                <td className="px-4 py-2.5 mono text-[12px] whitespace-nowrap" style={{ color: r.outcome === 'fired' ? 'var(--accent)' : '#71717a' }}>{actionText(r.detail)}</td>
-              </tr>
+              <div key={r.id} className="flex min-h-[44px] items-center gap-3 px-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[17px] leading-[22px] text-white">{r.ruleName ?? `Rule ${r.automationId}`}</div>
+                  <div className={`truncate text-[13px] leading-[18px] ${r.outcome === 'fired' ? 'text-sky-400' : 'text-zinc-500'}`}>{actionText(r.detail) || '—'}</div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="ios-numeric text-[15px] text-zinc-500">{hhmm(r.firedAt)}</div>
+                  <Badge tone={verdictTone(r.outcome)} dot>{verdictLabel(r.outcome)}</Badge>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        )}
+
+        {/* md+: table */}
+        {runs.length > 0 && (
+          <div className="hidden max-h-[420px] overflow-y-auto md:block">
+            <table className="w-full text-left">
+              <thead className="sticky top-0 bg-zinc-900">
+                <tr className="text-[13px] text-zinc-500">
+                  <th className="px-4 py-2 font-normal">Time</th>
+                  <th className="px-2 py-2 font-normal">Rule</th>
+                  <th className="px-2 py-2 font-normal">Verdict</th>
+                  <th className="px-4 py-2 font-normal">Action or reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.map(r => (
+                  <tr key={r.id} className="border-t border-zinc-800 hover:bg-zinc-800/40">
+                    <td className="ios-numeric whitespace-nowrap px-4 py-2.5 text-[15px] text-zinc-400">{hhmm(r.firedAt)}</td>
+                    <td className="px-2 py-2.5 text-[15px] text-white">{r.ruleName ?? `Rule ${r.automationId}`}</td>
+                    <td className="px-2 py-2.5"><Badge tone={verdictTone(r.outcome)} dot>{verdictLabel(r.outcome)}</Badge></td>
+                    <td className={`whitespace-nowrap px-4 py-2.5 text-[15px] ${r.outcome === 'fired' ? 'text-sky-400' : 'text-zinc-500'}`}>{actionText(r.detail)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-    </Card>
+    </section>
   )
 }
 
@@ -174,36 +192,45 @@ export function StatusPanel({ globalEnabled, onKill, rules, runs, loading, onDry
   const killed = !globalEnabled
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3 md:gap-4 md:px-5 md:py-4">
-        <div>
-          <h1 className="hidden text-[19px] font-semibold tracking-tight text-zinc-100 md:block">Diagnostics</h1>
-          <p className="text-[12px] text-zinc-500 md:mt-0.5">Live Autopilot state &amp; audit trail</p>
-        </div>
-        <div className={`flex items-center gap-3 rounded-xl border px-3.5 py-2 ${killed ? 'border-red-500/40 bg-red-500/10' : 'border-zinc-800 bg-zinc-900/50'}`}>
-          <Icon.Power size={16} className={killed ? 'text-red-400' : 'text-zinc-400'} />
-          <div className="leading-tight">
-            <div className="text-[12px] font-medium text-zinc-200">{killed ? 'Autopilot halted' : 'Autopilot running'}</div>
-            <div className="text-[10px] text-zinc-500">{killed ? 'all rules suspended' : 'global kill-switch'}</div>
-          </div>
-          <Toggle checked={!killed} onChange={() => onKill(killed)} tone={killed ? 'red' : 'accent'} />
-        </div>
+      <div className="hidden border-b border-zinc-800 px-5 py-4 md:block">
+        <h1 className="text-[22px] font-bold leading-7 text-white">Diagnostics</h1>
+        <p className="text-[13px] text-zinc-500">Live Autopilot state and audit trail</p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-5">
-        <div className="mx-auto max-w-6xl">
-          {killed && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-[13px] text-red-300">
-              <Icon.AlertTri size={15} />
-              Kill-switch engaged — no rule will command hardware. Manual control only.
+      <div className="min-h-0 flex-1 overflow-y-auto md:p-5">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <section className="space-y-1.5">
+            <div className="overflow-hidden rounded-xl bg-zinc-900">
+              <div className="flex min-h-[60px] items-center gap-3 px-4 py-2">
+                <span className={`grid h-[29px] w-[29px] shrink-0 place-items-center rounded-[7px] text-white ${killed ? 'bg-red-500' : 'bg-emerald-500'}`}>
+                  <Icon.Power size={17} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[17px] leading-[22px] text-white">Autopilot</div>
+                  <div className={`text-[13px] leading-[18px] ${killed ? 'text-red-400' : 'text-zinc-500'}`}>{killed ? 'Halted, all rules suspended' : 'Running'}</div>
+                </div>
+                <Toggle checked={!killed} onChange={() => onKill(killed)} aria-label="Autopilot kill switch" />
+              </div>
             </div>
-          )}
+            <p className="px-4 text-[13px] leading-[18px] text-zinc-500">
+              {killed
+                ? 'Kill switch engaged. No rule will command hardware; manual control only.'
+                : 'Turn off to immediately stop every rule from touching the bed.'}
+            </p>
+          </section>
+
           {loading
-            ? <div className="py-16 text-center text-[13px] text-zinc-600">Loading status…</div>
+            ? <div className="py-16 text-center text-[15px] text-zinc-500">Loading status…</div>
             : (
                 <>
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 mb-5">
-                    {rules.map(a => <RuleStatusCard key={a.id} a={a} onDry={onDry} />)}
-                  </div>
+                  {rules.length > 0 && (
+                    <section className="space-y-1.5">
+                      <GroupHeader>Rules</GroupHeader>
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {rules.map(a => <RuleStatusCard key={a.id} a={a} onDry={onDry} />)}
+                      </div>
+                    </section>
+                  )}
                   <RunLog runs={runs} />
                 </>
               )}
