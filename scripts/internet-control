@@ -78,6 +78,8 @@ EIGHTSLEEP_DOMAINS=(
   "api.8slp.net"              # general API
   "app-api.8slp.net"          # mobile app API
   "client-api.8slp.net"       # client API
+  "update-api.8slp.net"       # OTA firmware update checks (globals.sh)
+  "remote-connectivity-api.8slp.net"  # Capybara remote-connectivity service
 )
 
 hosts_is_blocked() {
