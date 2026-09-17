@@ -201,6 +201,14 @@ case "$COMMAND" in
     # Allow local network
     "$IPTABLES" -A SLEEPYPOD-BLOCK -d "$LOCAL_SUBNET" -j ACCEPT
 
+    # Extra trusted LAN ranges (see scripts/lib/iptables-helpers)
+    if [ -r /etc/sleepypod/lan-cidrs ]; then
+      while IFS= read -r lan_cidr; do
+        "$IPTABLES" -A SLEEPYPOD-BLOCK -d "$lan_cidr" -j ACCEPT
+      done < <(sed 's/#.*//' /etc/sleepypod/lan-cidrs | tr -d ' \t\r' \
+        | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}/([89]|[12][0-9]|3[0-2])$' || true)
+    fi
+
     # Allow mDNS for local discovery
     "$IPTABLES" -A SLEEPYPOD-BLOCK -d 224.0.0.251/32 -p udp --dport 5353 -j ACCEPT
 

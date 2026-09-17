@@ -134,6 +134,7 @@ else
       echo "Restoring iptables rules..."
       if ! printf '%s\n' "$SAVED_IPTABLES" | iptables-restore || ! wan_is_effectively_blocked; then
         echo "Error: failed to restore a blocking iptables ruleset; applying a deny policy." >&2
+        declare -F allow_extra_lan_cidrs >/dev/null && { allow_extra_lan_cidrs 2>/dev/null || true; }
         iptables -P OUTPUT DROP || return 1
         iptables -P INPUT DROP || return 1
         iptables -P FORWARD DROP || return 1
@@ -177,6 +178,7 @@ cleanup() {
     reload_iptables_helpers
     if ! restore_wan; then
       echo "Critical: firewall restore failed; forcing default policies DROP." >&2
+      declare -F allow_extra_lan_cidrs >/dev/null && { allow_extra_lan_cidrs 2>/dev/null || true; }
       iptables -P OUTPUT DROP 2>/dev/null || true
       iptables -P INPUT DROP 2>/dev/null || true
       iptables -P FORWARD DROP 2>/dev/null || true

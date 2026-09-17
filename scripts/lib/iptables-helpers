@@ -38,6 +38,39 @@ wan_is_effectively_blocked() {
   [ "$policy_drop" = true ]
 }
 
+# Extra trusted LAN ranges beyond RFC 1918, for home networks numbered from
+# public address space (e.g. 13.0.0.0/24). One CIDR per line; `#` comments ok.
+# SLEEPYPOD_LAN_CIDRS (space or comma separated) is honoured as well.
+TRUSTED_LAN_CIDRS_FILE="${TRUSTED_LAN_CIDRS_FILE:-/etc/sleepypod/lan-cidrs}"
+
+# Print the extra trusted IPv4 CIDRs, one per line. Anything that is not an
+# a.b.c.d/n literal with a /8-or-longer prefix is dropped, so a typo or
+# 0.0.0.0/0 can never become a blanket ACCEPT.
+extra_lan_cidrs() {
+  local env_cidrs="${SLEEPYPOD_LAN_CIDRS:-}"
+  {
+    [ -r "$TRUSTED_LAN_CIDRS_FILE" ] && cat "$TRUSTED_LAN_CIDRS_FILE"
+    printf '%s\n' ${env_cidrs//,/ }
+  } 2>/dev/null \
+    | sed 's/#.*//' | tr -d ' \t\r' \
+    | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}/([89]|[12][0-9]|3[0-2])$' \
+    | sort -u || true
+}
+
+# Insert ACCEPT rules for the extra trusted LAN CIDRs at the top of INPUT and
+# OUTPUT (idempotent). Run right after every flush and before any emergency
+# DROP policy: without it a LAN outside RFC 1918 loses SSH — a hard lockout.
+allow_extra_lan_cidrs() {
+  local cidr
+  while IFS= read -r cidr; do
+    [ -n "$cidr" ] || continue
+    iptables -C INPUT -s "$cidr" -j ACCEPT 2>/dev/null \
+      || iptables -I INPUT 1 -s "$cidr" -j ACCEPT || return 1
+    iptables -C OUTPUT -d "$cidr" -j ACCEPT 2>/dev/null \
+      || iptables -I OUTPUT 1 -d "$cidr" -j ACCEPT || return 1
+  done < <(extra_lan_cidrs)
+}
+
 unblock_wan() {
   echo "Temporarily unblocking WAN access..."
   # Capture rules from stdout only. iptables-save can emit backend warnings
@@ -109,6 +142,10 @@ block_wan() {
     conntrack -F &>/dev/null || true
   fi
 
+  # Trusted non-RFC1918 LAN ranges go in first, so even a rebuild that fails
+  # below leaves the admin's LAN able to reach SSH.
+  allow_extra_lan_cidrs || return 1
+
   # Allow established connections
   iptables -I INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT || return 1
   iptables -I OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT || return 1
@@ -169,6 +206,7 @@ block_wan() {
 
   if ! wan_is_effectively_blocked; then
     echo "Error: rebuilt ruleset does not block OUTPUT." >&2
+    allow_extra_lan_cidrs 2>/dev/null || true
     iptables -P OUTPUT DROP 2>/dev/null || true
     iptables -P INPUT DROP 2>/dev/null || true
     iptables -P FORWARD DROP 2>/dev/null || true
