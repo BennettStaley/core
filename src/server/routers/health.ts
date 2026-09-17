@@ -31,6 +31,26 @@ const DAC_SOCK_PATH = process.env.DAC_SOCK_PATH || '/persistent/deviceinfo/dac.s
  * - `dacMonitor` — hardware polling loop status and gesture support flag
  * - `hardware`  — raw socket connectivity check with latency
  */
+/**
+ * Number of scheduler jobs the enabled temperature / power / alarm schedule
+ * rows should produce. Each power schedule creates two jobs (on + off).
+ */
+function expectedScheduleJobCount(): number {
+  const tempSchedules = db.select({ id: temperatureSchedules.id })
+    .from(temperatureSchedules)
+    .where(eq(temperatureSchedules.enabled, true))
+    .all()
+  const powSchedules = db.select({ id: powerSchedules.id })
+    .from(powerSchedules)
+    .where(eq(powerSchedules.enabled, true))
+    .all()
+  const almSchedules = db.select({ id: alarmSchedules.id })
+    .from(alarmSchedules)
+    .where(eq(alarmSchedules.enabled, true))
+    .all()
+  return tempSchedules.length + (powSchedules.length * 2) + almSchedules.length
+}
+
 export const healthRouter = router({
   performance: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/health/performance', protect: false, tags: ['Health'] } })
@@ -47,8 +67,8 @@ export const healthRouter = router({
 
   /**
    * Returns job counts, upcoming invocations, and a `healthy` flag.
-   * `healthy` is false only when the scheduler is enabled but has zero jobs
-   * (indicates the scheduler failed to load schedules from the DB).
+   * `healthy` is false only when the scheduler is enabled with zero jobs while
+   * the DB has enabled schedules (it failed to load them).
    */
   scheduler: publicProcedure
     .meta({ openapi: { method: 'GET', path: '/health/scheduler', protect: false, tags: ['Health'] } })
@@ -136,16 +156,21 @@ export const healthRouter = router({
           .slice(0, 10) // Return next 10 upcoming jobs
 
         const enabled = scheduler.isEnabled()
+        // An empty scheduler is only a failure when the DB holds enabled
+        // schedules it should have loaded. A fresh install with no schedules
+        // has nothing to load and must not show a degraded Core card.
+        let schedulesExpected = true
+        try {
+          schedulesExpected = expectedScheduleJobCount() > 0
+        }
+        catch {
+          // DB unreadable — keep the conservative "jobs expected" assumption
+        }
         return {
           enabled,
           jobCounts,
           upcomingJobs,
-          // Healthy when scheduler is disabled (no jobs expected) or enabled
-          // with at least one loaded job. The previous `jobs.length > 0 ||
-          // jobCounts.total === 0` was always true because jobCounts.total is
-          // derived from jobs.length, so an enabled-but-empty scheduler (the
-          // failure mode this signal is meant to catch) was reported healthy.
-          healthy: enabled ? jobCounts.total > 0 : true,
+          healthy: !enabled || jobCounts.total > 0 || !schedulesExpected,
         }
       }
       catch (error) {
@@ -232,21 +257,7 @@ export const healthRouter = router({
       // Scheduler drift detection: compare DB enabled schedule count vs scheduler job count
       let drift: { dbScheduleCount: number, schedulerJobCount: number, drifted: boolean } | undefined
       try {
-        const tempSchedules = db.select({ id: temperatureSchedules.id })
-          .from(temperatureSchedules)
-          .where(eq(temperatureSchedules.enabled, true))
-          .all()
-        const powSchedules = db.select({ id: powerSchedules.id })
-          .from(powerSchedules)
-          .where(eq(powerSchedules.enabled, true))
-          .all()
-        const almSchedules = db.select({ id: alarmSchedules.id })
-          .from(alarmSchedules)
-          .where(eq(alarmSchedules.enabled, true))
-          .all()
-
-        // Each power schedule creates 2 jobs (on + off), others create 1 each
-        const expectedJobCount = tempSchedules.length + (powSchedules.length * 2) + almSchedules.length
+        const expectedJobCount = expectedScheduleJobCount()
 
         // Only count job types that originate from the schedule tables above.
         // Every other type (prime, reboot, LED brightness, away-mode,
