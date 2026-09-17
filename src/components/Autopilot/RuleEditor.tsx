@@ -1,7 +1,8 @@
 /**
- * Rule editor — full-screen, two-pane. Left: WHEN / IF / THEN structured form.
- * Right: sticky live "reads as" sentence + a backtest that re-runs against real
- * history as you edit. Local state until explicit Save (no autosave).
+ * Rule editor. On phones it is an iOS page sheet (Cancel / title / Save bar,
+ * grouped When / If / Then cards, then the live "reads as" sentence and the
+ * backtest). From md up it is full-screen and two-pane. The backtest re-runs
+ * against real history as you edit. Local state until explicit Save.
  */
 'use client'
 
@@ -38,17 +39,16 @@ const numSignalOpts = SIGNALS.map(s => ({ value: s.id, label: s.label, icon: s.i
 function SentencePreview({ rule }: { rule: BuilderRule }) {
   const chunks = buildSentence(rule)
   return (
-    <Card className="p-4" style={{ background: 'color-mix(in srgb, var(--accent) 7%, #0a0a0b)', borderColor: 'color-mix(in srgb, var(--accent) 22%, transparent)' }}>
-      <div className="flex items-center gap-2 mb-2">
-        <Icon.Sliders size={13} style={{ color: 'var(--accent)' }} />
-        <span className="text-[11px] font-semibold tracking-[0.12em] uppercase" style={{ color: 'var(--accent)' }}>Reads as</span>
-      </div>
-      <p className="text-[15px] leading-relaxed text-zinc-300" style={{ textWrap: 'pretty' }}>
-        {chunks.map((c, i) => (
-          <span key={i} className={c.mono ? 'mono' : ''} style={c.hot ? { color: 'var(--accent)', fontWeight: 500 } : undefined}>{c.text}</span>
-        ))}
-      </p>
-    </Card>
+    <section className="space-y-1.5">
+      <h3 className="px-4 text-[13px] leading-[18px] text-zinc-500">Reads as</h3>
+      <Card className="px-4 py-3">
+        <p className="text-[17px] leading-[24px] text-zinc-300" style={{ textWrap: 'pretty' }}>
+          {chunks.map((c, i) => (
+            <span key={i} className={c.hot ? 'font-medium text-sky-400' : ''}>{c.text}</span>
+          ))}
+        </p>
+      </Card>
+    </section>
   )
 }
 
@@ -64,8 +64,8 @@ function WhenEditor({ rule, set }: { rule: BuilderRule, set: (r: BuilderRule) =>
   const types = [
     { value: 'agg', label: 'Aggregate' },
     { value: 'cond', label: 'Threshold' },
-    { value: 'change', label: 'On change' },
-    { value: 'time', label: 'Time of day' },
+    { value: 'change', label: 'Change' },
+    { value: 'time', label: 'Time' },
   ] as const
   const switchType = (t: WhenSpec['type']) => {
     if (t === 'agg') set({ ...rule, when: { type: 'agg', agg: 'avg', signal: '{side}.movement', window: 10, op: '>', value: 200 } })
@@ -76,9 +76,9 @@ function WhenEditor({ rule, set }: { rule: BuilderRule, set: (r: BuilderRule) =>
 
   return (
     <Card className="p-4">
-      <SectionLabel kicker="When" color="var(--accent)" icon="Zap" desc="the trigger that starts evaluation" />
-      <div className="mb-3"><Segmented size="sm" value={w.type} options={types} onChange={switchType} /></div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[13px] text-zinc-400">
+      <SectionLabel kicker="When" color="#0A84FF" icon="Zap" desc="The trigger that starts evaluation" />
+      <div className="mb-3"><Segmented full value={w.type} options={types} onChange={switchType} /></div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[15px] text-zinc-400">
         {w.type === 'agg' && (
           <>
             <Select chip value={w.agg} options={[...AGGS]} onChange={v => setW({ agg: v as WhenSpec extends { agg: infer A } ? A : never })} />
@@ -130,39 +130,41 @@ function IfEditor({ rule, set }: { rule: BuilderRule, set: (r: BuilderRule) => v
 
   return (
     <Card className="p-4">
-      <SectionLabel kicker="If" color="#a1a1aa" icon="Shield" desc="extra conditions — all must hold (AND)" right={<span className="text-[11px] text-zinc-600">optional</span>} />
-      {ifs.length === 0 && <div className="text-[12px] text-zinc-600 mb-3">No conditions — fires whenever the trigger hits.</div>}
-      <div className="flex flex-col gap-2 mb-3">
+      <SectionLabel kicker="If" color="#636366" icon="Shield" desc="Extra conditions, all must hold" right={<span className="text-[13px] text-zinc-500">Optional</span>} />
+      {ifs.length === 0 && <div className="mb-3 text-[15px] text-zinc-500">No conditions. Fires whenever the trigger hits.</div>}
+      <div className="mb-3 flex flex-col gap-2">
         {ifs.map((c, i) => (
-          <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800/70 bg-zinc-900/40 px-2.5 py-2">
-            <span className="mono text-[10px] uppercase tracking-wide text-zinc-600 mr-1">and</span>
-            {c.type === 'time'
-              ? (
-                  <>
-                    <span className="text-[13px] text-zinc-400">it&apos;s between</span>
-                    <TimeField value={c.between[0]} onChange={v => upd(i, { between: [v, c.between[1]] })} />
-                    <span className="text-[13px] text-zinc-400">and</span>
-                    <TimeField value={c.between[1]} onChange={v => upd(i, { between: [c.between[0], v] })} />
-                  </>
-                )
-              : (
-                  <>
-                    <Select chip value={c.signal} options={numSignalOpts} onChange={v => upd(i, { signal: v })} />
-                    <Select chip value={c.op} options={[...UI_OPS]} onChange={v => upd(i, { op: v as UiOp })} />
-                    <NumberField value={c.value} step={1} onChange={v => upd(i, { value: v })} width={88} />
-                  </>
-                )}
-            <button type="button" onClick={() => del(i)} className="ml-auto text-zinc-600 hover:text-red-400"><Icon.X size={14} /></button>
+          <div key={i} className="flex items-center gap-1 rounded-lg bg-zinc-800/50 py-1.5 pl-3 pr-0">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <span className="mr-0.5 text-[13px] text-zinc-500">and</span>
+              {c.type === 'time'
+                ? (
+                    <>
+                      <span className="text-[15px] text-zinc-400">it&apos;s between</span>
+                      <TimeField value={c.between[0]} onChange={v => upd(i, { between: [v, c.between[1]] })} />
+                      <span className="text-[15px] text-zinc-400">and</span>
+                      <TimeField value={c.between[1]} onChange={v => upd(i, { between: [c.between[0], v] })} />
+                    </>
+                  )
+                : (
+                    <>
+                      <Select chip value={c.signal} options={numSignalOpts} onChange={v => upd(i, { signal: v })} />
+                      <Select chip value={c.op} options={[...UI_OPS]} onChange={v => upd(i, { op: v as UiOp })} />
+                      <NumberField value={c.value} step={1} onChange={v => upd(i, { value: v })} width={88} />
+                    </>
+                  )}
+            </div>
+            <button type="button" onClick={() => del(i)} aria-label="Remove condition" className="grid h-11 w-11 shrink-0 place-items-center text-zinc-500 active:text-red-400 hover:text-red-400"><Icon.X size={16} /></button>
           </div>
         ))}
       </div>
       <div className="flex gap-2">
         <Button variant="outline" size="sm" onClick={() => add('time')}>
-          <Icon.Clock size={13} />
+          <Icon.Clock size={15} />
           Time window
         </Button>
         <Button variant="outline" size="sm" onClick={() => add('cond')}>
-          <Icon.Plus size={13} />
+          <Icon.Plus size={15} />
           Condition
         </Button>
       </div>
@@ -191,7 +193,7 @@ function ThenEditor({ rule, set, liveAmbient }: { rule: BuilderRule, set: (r: Bu
 
   return (
     <Card className="p-4">
-      <SectionLabel kicker="Then" color="#22c55e" icon="Play" desc="what Autopilot does when it fires" />
+      <SectionLabel kicker="Then" color="#30D158" icon="Play" desc="What Autopilot does when it fires" />
       <div className="flex items-center gap-2 mb-3">
         <Select
           chip
@@ -207,30 +209,33 @@ function ThenEditor({ rule, set, liveAmbient }: { rule: BuilderRule, set: (r: Bu
 
       {isTemp && (
         <div className="flex flex-col gap-3">
-          <Segmented size="sm" value={isExpr ? 'expr' : 'amount'} options={[{ value: 'amount', label: 'By amount' }, { value: 'expr', label: 'Expression' }]} onChange={v => v === 'expr' ? setA({ expr: 'ambient + 3', delta: undefined, revert: undefined }) : setA({ expr: undefined, delta: -2 })} />
+          <Segmented full value={isExpr ? 'expr' : 'amount'} options={[{ value: 'amount', label: 'By amount' }, { value: 'expr', label: 'Expression' }]} onChange={v => v === 'expr' ? setA({ expr: 'ambient + 3', delta: undefined, revert: undefined }) : setA({ expr: undefined, delta: -2 })} />
 
           {!isExpr && (
-            <div className="flex flex-wrap items-center gap-2 text-[13px] text-zinc-400">
-              <Select chip value={(a.delta ?? -2) < 0 ? 'lower' : 'raise'} options={['lower', 'raise']} onChange={v => setA({ delta: (v === 'lower' ? -1 : 1) * Math.abs(a.delta ?? 2) })} />
-              <span>by</span>
-              <NumberField value={Math.abs(a.delta ?? 2)} step={1} suffix="°F" onChange={v => setA({ delta: ((a.delta ?? -2) < 0 ? -1 : 1) * Math.max(0, v) })} width={84} />
-              <label className="ml-1 inline-flex items-center gap-2 text-[12px] text-zinc-400">
-                <Toggle size="sm" checked={!!a.revert} onChange={v => setA({ revert: v ? 20 : undefined })} />
-                revert after
-              </label>
-              {a.revert ? <NumberField value={a.revert} step={5} suffix="minutes" onChange={v => setA({ revert: Math.max(1, v) })} width={78} /> : null}
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-[15px] text-zinc-400">
+                <Select chip value={(a.delta ?? -2) < 0 ? 'lower' : 'raise'} options={['lower', 'raise']} onChange={v => setA({ delta: (v === 'lower' ? -1 : 1) * Math.abs(a.delta ?? 2) })} />
+                <span>by</span>
+                <NumberField value={Math.abs(a.delta ?? 2)} step={1} suffix="°F" onChange={v => setA({ delta: ((a.delta ?? -2) < 0 ? -1 : 1) * Math.max(0, v) })} width={84} />
+              </div>
+              <div className="flex min-h-[44px] flex-wrap items-center justify-between gap-2 border-t border-zinc-800 pt-3">
+                <span className="text-[17px] text-white">Revert after</span>
+                <span className="flex items-center gap-3">
+                  {a.revert ? <NumberField value={a.revert} step={5} suffix="min" onChange={v => setA({ revert: Math.max(1, v) })} width={64} /> : null}
+                  <Toggle checked={!!a.revert} onChange={v => setA({ revert: v ? 20 : undefined })} aria-label="Revert after a delay" />
+                </span>
+              </div>
             </div>
           )}
 
           {isExpr && (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                <Icon.Function size={14} className="text-zinc-500" />
-                <input value={a.expr} onChange={e => setA({ expr: e.target.value })} spellCheck={false} className="mono flex-1 rounded-lg border border-zinc-700/70 bg-zinc-950/70 px-3 py-2 text-[14px] text-emerald-300 focus:border-zinc-500 focus:outline-none" />
+                <input value={a.expr} onChange={e => setA({ expr: e.target.value })} spellCheck={false} aria-label="Expression" className="mono min-h-[44px] min-w-0 flex-1 rounded-lg bg-zinc-800 px-3 text-[16px] text-white focus:outline-none" />
                 {exprEval != null && (
-                  <span className="mono whitespace-nowrap rounded-md border border-zinc-700/60 bg-zinc-900/60 px-2 py-2 text-[12px] text-zinc-400">
-                    =
-                    <span className="text-zinc-100">
+                  <span className="ios-numeric whitespace-nowrap text-[15px] text-zinc-500">
+                    {'= '}
+                    <span className="text-white">
                       {Math.round(exprEval)}
                       °F
                     </span>
@@ -239,47 +244,51 @@ function ThenEditor({ rule, set, liveAmbient }: { rule: BuilderRule, set: (r: Bu
                   </span>
                 )}
               </div>
-              <div className="text-[11px] text-zinc-600">
+              <div className="text-[13px] leading-[18px] text-zinc-500">
                 Variables:
-                <span className="mono text-zinc-400">ambient</span>
+                {' '}
+                <span className="mono text-zinc-300">ambient</span>
                 ,
-                <span className="mono text-zinc-400">target</span>
+                {' '}
+                <span className="mono text-zinc-300">target</span>
                 ,
-                <span className="mono text-zinc-400">current</span>
+                {' '}
+                <span className="mono text-zinc-300">current</span>
                 . Evaluated every tick.
               </div>
             </div>
           )}
 
-          <div className="rounded-lg border border-zinc-800/70 bg-zinc-900/30 p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Icon.Shield size={13} className="text-amber-400" />
-              <span className="text-[12px] font-medium text-zinc-300">Safety clamp</span>
-              <span className="text-[11px] text-zinc-600">never command outside these bounds</span>
+          <div className="border-t border-zinc-800 pt-3">
+            <div className="mb-2 flex items-center gap-2">
+              <Icon.Shield size={16} className="text-amber-400" />
+              <span className="text-[17px] text-white">Safety clamp</span>
             </div>
-            <div className="flex items-center gap-2 text-[13px] text-zinc-400">
-              <span>min</span>
-              <NumberField value={clamp[0]} step={1} suffix="°F" onChange={v => setA({ clamp: [v, clamp[1]] })} width={84} />
-              <span>max</span>
-              <NumberField value={clamp[1]} step={1} suffix="°F" onChange={v => setA({ clamp: [clamp[0], v] })} width={84} />
+            <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-4">
+              <div className="flex items-center justify-between gap-2 md:justify-start">
+                <span className="text-[15px] text-zinc-400">Minimum</span>
+                <NumberField value={clamp[0]} step={1} suffix="°F" onChange={v => setA({ clamp: [v, clamp[1]] })} width={64} />
+              </div>
+              <div className="flex items-center justify-between gap-2 md:justify-start">
+                <span className="text-[15px] text-zinc-400">Maximum</span>
+                <NumberField value={clamp[1]} step={1} suffix="°F" onChange={v => setA({ clamp: [clamp[0], v] })} width={64} />
+              </div>
             </div>
+            <p className="mt-2 text-[13px] leading-[18px] text-zinc-500">Autopilot never commands a temperature outside these bounds.</p>
           </div>
         </div>
       )}
 
       {a.action === 'notify' && (
-        <input value={a.message} onChange={e => setA({ message: e.target.value })} placeholder="Notification message…" className="w-full rounded-lg border border-zinc-700/70 bg-zinc-950/70 px-3 py-2 text-[13px] text-zinc-200 focus:border-zinc-500 focus:outline-none" />
+        <input value={a.message} onChange={e => setA({ message: e.target.value })} placeholder="Notification message" aria-label="Notification message" className="min-h-[44px] w-full rounded-lg bg-zinc-800 px-3 text-[16px] text-white focus:outline-none" />
       )}
       {a.action === 'setPower' && (
-        <Segmented size="sm" value={a.on ? 'on' : 'off'} options={[{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }]} onChange={v => setA({ on: v === 'on' })} />
+        <Segmented full value={a.on ? 'on' : 'off'} options={[{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }]} onChange={v => setA({ on: v === 'on' })} />
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-zinc-800/70 pt-3 text-[12px] text-zinc-400">
-        <label className="inline-flex items-center gap-2">
-          <Icon.Clock size={13} className="text-zinc-500" />
-          cooldown
-          <NumberField value={rule.cooldown} step={5} suffix="minutes" onChange={v => set({ ...rule, cooldown: Math.max(0, v) })} width={80} />
-        </label>
+      <div className="mt-3 flex min-h-[44px] flex-wrap items-center justify-between gap-2 border-t border-zinc-800 pt-3">
+        <span className="text-[17px] text-white">Cooldown</span>
+        <NumberField value={rule.cooldown} step={5} suffix="min" onChange={v => set({ ...rule, cooldown: Math.max(0, v) })} width={64} />
       </div>
     </Card>
   )
@@ -329,59 +338,79 @@ export function RuleEditor({ automation, onClose, onSave, saving }: { automation
   )
 
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-zinc-950/95 backdrop-blur-sm ap-console" style={{ animation: 'apFade .15s ease' }}>
-      <div
-        className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-zinc-800 px-3 py-2.5 md:flex-nowrap md:px-5 md:py-3"
-        style={{ paddingTop: 'max(0.625rem, env(safe-area-inset-top, 0px))' }}
-      >
-        <button type="button" onClick={onClose} aria-label="Close" className="grid h-10 w-10 place-items-center rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 md:h-8 md:w-8"><Icon.X size={17} /></button>
-        <input value={rule.name} onChange={e => setRule({ ...rule, name: e.target.value })} className="min-w-0 flex-1 bg-transparent text-[16px] font-semibold text-zinc-100 focus:outline-none md:max-w-sm" />
-        <Button variant="accent" size="md" onClick={() => onSave(rule)} disabled={saving} className="md:order-last">
-          <Icon.Check size={15} />
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
-        <div className="flex w-full items-center justify-between gap-3 md:ml-auto md:w-auto md:justify-end">
-          <Segmented size="sm" value={rule.side} options={[{ value: 'left', label: 'L' }, { value: 'right', label: 'R' }, { value: 'both', label: 'Both' }]} onChange={v => setRule({ ...rule, side: v })} />
-          <div className="hidden h-5 w-px bg-zinc-800 md:block" />
-          <Segmented size="sm" value={rule.mode} options={[{ value: 'dryrun', label: 'Dry-run' }, { value: 'active', label: 'Active' }]} onChange={v => setRule({ ...rule, mode: v, enabled: true })} />
-          <span className="hidden md:block"><Button variant="ghost" size="md" onClick={onClose}>Cancel</Button></span>
-        </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
-        <div className="border-zinc-800 p-3 md:w-[44%] md:min-w-[420px] md:overflow-y-auto md:border-r md:p-5">
-          <div className="mx-auto flex max-w-xl flex-col gap-3">
-            <WhenEditor rule={rule} set={setRule} />
-            <div className="flex justify-center"><Icon.ArrowDown size={16} className="text-zinc-700" /></div>
-            <IfEditor rule={rule} set={setRule} />
-            <div className="flex justify-center"><Icon.ArrowDown size={16} className="text-zinc-700" /></div>
-            <ThenEditor rule={rule} set={setRule} liveAmbient={liveAmbient} />
+    <div className="ap-console fixed inset-0 z-[200] flex flex-col bg-black/60 md:bg-zinc-950/95 md:backdrop-blur-sm" style={{ animation: 'apFade .15s ease' }} role="dialog" aria-modal="true" aria-label={rule.name}>
+      {/* phone: page sheet with an inline navigation bar */}
+      <div className="h-[max(12px,env(safe-area-inset-top,0px))] shrink-0 md:hidden" />
+      <div className="flex min-h-0 flex-1 flex-col rounded-t-[10px] bg-black md:rounded-none md:bg-transparent">
+        <div className="md:hidden">
+          <div className="mx-auto mt-1.5 h-[5px] w-9 rounded-full bg-zinc-700" />
+          <div className="grid min-h-[44px] grid-cols-[1fr_auto_1fr] items-center gap-2 px-4">
+            <button type="button" onClick={onClose} className="justify-self-start text-[17px] text-sky-400 active:opacity-50">Cancel</button>
+            <div className="max-w-[180px] truncate text-[17px] font-semibold text-white">{automation.id != null ? 'Edit automation' : 'New automation'}</div>
+            <button type="button" onClick={() => onSave(rule)} disabled={saving} className="justify-self-end text-[17px] font-semibold text-sky-400 active:opacity-50 disabled:opacity-40">
+              {saving ? 'Saving…' : 'Save'}
+            </button>
           </div>
         </div>
 
-        <div className="bg-zinc-950/40 p-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] md:flex-1 md:overflow-y-auto md:p-5">
-          <div className="mx-auto flex max-w-2xl flex-col gap-4">
-            {rule.mode === 'dryrun' && (
-              <div className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-400">
-                <Icon.Flask size={14} />
-                Dry-run: Autopilot logs what it would do but never touches hardware.
+        {/* md+: toolbar */}
+        <div className="hidden items-center gap-3 border-b border-zinc-800 px-5 py-3 md:flex">
+          <input value={rule.name} onChange={e => setRule({ ...rule, name: e.target.value })} aria-label="Automation name" className="min-w-0 max-w-sm flex-1 bg-transparent text-[17px] font-semibold text-white focus:outline-none" />
+          <div className="ml-auto flex items-center gap-3">
+            <Segmented value={rule.side} options={[{ value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }, { value: 'both', label: 'Both' }]} onChange={v => setRule({ ...rule, side: v })} />
+            <Segmented value={rule.mode} options={[{ value: 'dryrun', label: 'Dry run' }, { value: 'active', label: 'Active' }]} onChange={v => setRule({ ...rule, mode: v, enabled: true })} />
+            <Button variant="ghost" size="md" onClick={onClose}>Cancel</Button>
+            <Button variant="accent" size="md" onClick={() => onSave(rule)} disabled={saving}>
+              <Icon.Check size={16} />
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain md:flex-row md:overflow-hidden">
+          <div className="border-zinc-800 px-4 pb-2 pt-3 md:w-[44%] md:min-w-[420px] md:overflow-y-auto md:border-r md:p-5">
+            <div className="mx-auto flex max-w-xl flex-col gap-4">
+              {/* phone: name, side and mode as a grouped list */}
+              <div className="overflow-hidden rounded-xl bg-zinc-900 md:hidden [&>*+*]:border-t [&>*+*]:border-zinc-800">
+                <input value={rule.name} onChange={e => setRule({ ...rule, name: e.target.value })} aria-label="Automation name" placeholder="Name" className="min-h-[44px] w-full bg-transparent px-4 text-[17px] text-white focus:outline-none" />
+                <div className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-1.5">
+                  <span className="text-[17px] text-white">Side</span>
+                  <Segmented value={rule.side} options={[{ value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }, { value: 'both', label: 'Both' }]} onChange={v => setRule({ ...rule, side: v })} />
+                </div>
+                <div className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-1.5">
+                  <span className="text-[17px] text-white">Mode</span>
+                  <Segmented value={rule.mode} options={[{ value: 'dryrun', label: 'Dry run' }, { value: 'active', label: 'Active' }]} onChange={v => setRule({ ...rule, mode: v, enabled: true })} />
+                </div>
               </div>
-            )}
-            <SentencePreview rule={rule} />
-            {usesCapSignal && <CapZoneViz side={rule.side} backtestSide={backtestSide} nightId={nightId} />}
-            <Card className="p-4">
-              <BacktestPanel
-                result={backtestQ.data?.ok ? (backtestQ.data.result as Parameters<typeof BacktestPanel>[0]['result']) : null}
-                loading={backtestQ.isLoading || backtestQ.isFetching}
-                message={nights.length === 0 ? (nightsQ.isLoading ? undefined : 'No recorded nights for this side yet — backtest needs sleep history.') : (backtestQ.data && !backtestQ.data.ok ? backtestQ.data.message : undefined)}
-                nights={nights}
-                nightId={nightId}
-                onNight={setPicked}
-              />
-            </Card>
-            <div className="flex items-start gap-2 text-[11px] text-zinc-600">
-              <Icon.Shield size={13} className="mt-0.5 shrink-0 text-zinc-600" />
-              Backtest replays real recorded sensor history against your current settings. Nothing here changes your bed — it&apos;s a dry preview of how this rule would have behaved.
+              <WhenEditor rule={rule} set={setRule} />
+              <IfEditor rule={rule} set={setRule} />
+              <ThenEditor rule={rule} set={setRule} liveAmbient={liveAmbient} />
+            </div>
+          </div>
+
+          <div className="px-4 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-4 md:flex-1 md:overflow-y-auto md:p-5">
+            <div className="mx-auto flex max-w-2xl flex-col gap-4">
+              {rule.mode === 'dryrun' && (
+                <div className="flex items-start gap-3 rounded-xl bg-zinc-900 px-4 py-3 text-[15px] leading-5 text-zinc-400">
+                  <Icon.Flask size={18} className="mt-px shrink-0 text-amber-400" />
+                  Dry run: Autopilot logs what it would do but never touches hardware.
+                </div>
+              )}
+              <SentencePreview rule={rule} />
+              {usesCapSignal && <CapZoneViz side={rule.side} backtestSide={backtestSide} nightId={nightId} />}
+              <Card className="p-4">
+                <BacktestPanel
+                  result={backtestQ.data?.ok ? (backtestQ.data.result as Parameters<typeof BacktestPanel>[0]['result']) : null}
+                  loading={backtestQ.isLoading || backtestQ.isFetching}
+                  message={nights.length === 0 ? (nightsQ.isLoading ? undefined : 'No recorded nights for this side yet — backtest needs sleep history.') : (backtestQ.data && !backtestQ.data.ok ? backtestQ.data.message : undefined)}
+                  nights={nights}
+                  nightId={nightId}
+                  onNight={setPicked}
+                />
+              </Card>
+              <p className="-mt-2 px-4 text-[13px] leading-[18px] text-zinc-500">
+                Backtest replays recorded sensor history against your current settings. Nothing here changes your bed; it&apos;s a preview of how this rule would have behaved.
+              </p>
             </div>
           </div>
         </div>

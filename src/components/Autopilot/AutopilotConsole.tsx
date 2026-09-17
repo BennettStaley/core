@@ -8,13 +8,14 @@
 
 import { useMemo, useState } from 'react'
 import { trpc } from '@/src/utils/trpc'
+import { PageHeader, SegmentedControl } from '@/src/ui/ios'
 import { Icon, type IconName } from './icons'
 import { AutomationsList, type ListItem } from './AutomationsList'
 import { RuleEditor } from './RuleEditor'
 import { StatusPanel } from './StatusPanel'
 import { type BuilderRule, blankRule, fromAST, toAST } from './builderModel'
 
-const ACCENT = '#0c87c2'
+const ACCENT = '#0A84FF' // systemBlue
 
 // Scoped styles ported from the design HTML: mono face, slim scrollbars, the
 // modal fade, and the accent default — confined to `.ap-console`.
@@ -104,38 +105,46 @@ export function AutopilotConsole() {
   return (
     <div className="ap-console text-zinc-100 md:mx-[calc(50%-50vw)] md:w-screen md:px-4" style={{ ['--accent' as string]: ACCENT }}>
       <style dangerouslySetInnerHTML={{ __html: SCOPED_CSS }} />
-      {/* phone header: title, running state, and a segmented screen switcher */}
-      <div className="mb-3 space-y-3 md:hidden">
-        <div className="flex items-center justify-between px-1">
-          <h1 className="text-3xl font-bold tracking-tight text-white">Autopilot</h1>
-          <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${killed ? 'bg-red-500/15 text-red-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${killed ? 'bg-red-400' : 'bg-emerald-400'}`} />
-            {killed ? 'Halted' : `${activeCount} active`}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-1 rounded-xl bg-zinc-900 p-1 text-[13px] font-medium">
-          {([['list', `Automations (${items.length})`], ['status', 'Diagnostics']] as const).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setScreen(id)}
-              className={`min-h-[36px] rounded-lg transition-colors ${screen === id ? 'bg-zinc-700 text-white' : 'text-zinc-400'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      {/* phone header: large title, running state, and a segmented screen switcher */}
+      <div className="mb-4 space-y-3 md:hidden">
+        <PageHeader
+          title="Autopilot"
+          subtitle={(
+            <span className={`inline-flex items-center gap-1.5 ${killed ? 'text-red-400' : ''}`}>
+              <span className={`h-2 w-2 rounded-full ${killed ? 'bg-red-500' : activeCount > 0 ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
+              {killed ? 'Halted' : `${activeCount} active`}
+            </span>
+          )}
+          trailing={screen === 'list' && !listQ.isLoading && items.length > 0
+            ? (
+                <button
+                  type="button"
+                  onClick={() => setEditing(blankRule())}
+                  aria-label="New automation"
+                  className="-mr-2 grid h-11 w-11 place-items-center text-sky-400 active:opacity-50"
+                >
+                  <Icon.Plus size={24} />
+                </button>
+              )
+            : undefined}
+        />
+        <SegmentedControl
+          aria-label="Autopilot section"
+          options={[{ value: 'list', label: 'Automations' }, { value: 'status', label: 'Diagnostics' }]}
+          value={screen}
+          onChange={setScreen}
+        />
       </div>
       <div className="mx-auto flex max-w-[1500px] gap-4">
         {/* side nav (md+) */}
-        <aside className="hidden w-[212px] shrink-0 flex-col self-start rounded-xl border border-zinc-800 bg-zinc-950/80 md:flex">
+        <aside className="hidden w-[212px] shrink-0 flex-col self-start rounded-xl bg-zinc-900/60 md:flex">
           <div className="flex items-center gap-2.5 px-4 py-4">
             <span className="grid h-8 w-8 place-items-center rounded-lg" style={{ background: 'color-mix(in srgb, var(--accent) 16%, transparent)', color: 'var(--accent)' }}>
               <Icon.Sliders size={17} />
             </span>
             <div className="leading-tight">
               <div className="text-[14px] font-semibold text-zinc-100">Autopilot</div>
-              <div className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">sleepypod</div>
+              <div className="text-[11px] text-zinc-600">sleepypod</div>
             </div>
           </div>
           <nav className="flex flex-col gap-1 px-3 py-2">
@@ -143,8 +152,8 @@ export function AutopilotConsole() {
             <NavItem icon="Pulse" label="Diagnostics" active={screen === 'status'} onClick={() => setScreen('status')} />
           </nav>
           <div className="mt-auto p-3">
-            <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-[11px] ${killed ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-zinc-800 bg-zinc-900/40 text-zinc-400'}`}>
-              <span className={`h-2 w-2 rounded-full ${killed ? 'bg-red-400' : 'bg-emerald-400'}`} style={killed ? undefined : { boxShadow: '0 0 0 3px rgba(52,211,153,0.18)' }} />
+            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] ${killed ? 'bg-red-500/15 text-red-400' : 'bg-zinc-900 text-zinc-400'}`}>
+              <span className={`h-2 w-2 rounded-full ${killed ? 'bg-red-500' : 'bg-emerald-500'}`} />
               {killed ? 'Halted' : 'Running'}
               <span className="ml-auto text-zinc-600">
                 {activeCount}
@@ -156,7 +165,7 @@ export function AutopilotConsole() {
         </aside>
 
         {/* content */}
-        <main className="min-w-0 flex-1 rounded-xl border border-zinc-800 bg-zinc-950/60 overflow-hidden" style={{ minHeight: 'min(calc(100dvh - 7rem), 100%)' }}>
+        <main className="min-w-0 flex-1 md:min-h-[min(calc(100dvh-7rem),100%)] md:overflow-hidden md:rounded-xl md:bg-zinc-900/40">
           {screen === 'list' && (
             <AutomationsList
               items={items}

@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { trpc } from '@/src/utils/trpc'
-import { Terminal, ChevronDown, ChevronUp, RefreshCw, Loader2 } from 'lucide-react'
+import { ChevronRight, Loader2, RefreshCw, Terminal } from 'lucide-react'
 import clsx from 'clsx'
+import { SegmentedControl } from '@/src/ui/ios'
 
 const PRIORITIES = [
   { label: 'All', value: undefined },
@@ -76,38 +77,38 @@ export function SystemLogViewer() {
   const logLines = logs?.lines ?? []
 
   return (
-    <div className="rounded-2xl bg-zinc-900/80 overflow-hidden">
-      {/* Toggle header */}
+    <div className="overflow-hidden rounded-xl bg-zinc-900">
+      {/* Disclosure row */}
       <button
+        type="button"
         onClick={() => setIsExpanded(v => !v)}
-        className="flex w-full items-center justify-between p-3 sm:p-4"
+        aria-expanded={isExpanded}
+        className="flex min-h-[44px] w-full items-center gap-3 px-4 text-left active:bg-zinc-800"
       >
-        <div className="flex items-center gap-2">
-          <Terminal size={16} className="text-zinc-400" />
-          <span className="text-sm font-medium text-white">System Logs</span>
-        </div>
-        {isExpanded
-          ? (
-              <ChevronUp size={16} className="text-zinc-500" />
-            )
-          : (
-              <ChevronDown size={16} className="text-zinc-500" />
-            )}
+        <span className="grid h-[29px] w-[29px] shrink-0 place-items-center rounded-[7px] bg-zinc-600 text-white">
+          <Terminal size={17} strokeWidth={2} />
+        </span>
+        <span className="min-w-0 flex-1 py-2.5 text-[17px] leading-[22px] text-white">System logs</span>
+        <ChevronRight
+          size={18}
+          className={clsx('shrink-0 text-zinc-600 transition-transform duration-200', isExpanded && 'rotate-90')}
+        />
       </button>
 
       {isExpanded && (
-        <div className="border-t border-zinc-800 px-3 pb-3 pt-2 space-y-2 sm:px-4 sm:pb-4 sm:pt-3 sm:space-y-3">
+        <div className="space-y-3 border-t border-zinc-800 p-4">
           {/* Service selector */}
-          <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
+          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
             {(sources?.sources ?? []).map((src: { name: string, unit: string, active: boolean }) => (
               <button
                 key={src.unit}
+                type="button"
                 onClick={() => setSelectedUnit(src.unit)}
                 className={clsx(
-                  'whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors',
+                  'min-h-[32px] whitespace-nowrap rounded-full px-3 text-[13px] font-medium transition-colors',
                   selectedUnit === src.unit
-                    ? 'bg-sky-600 text-white'
-                    : 'bg-zinc-800 text-zinc-400 active:bg-zinc-700',
+                    ? 'bg-sky-500 text-white'
+                    : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700',
                   !src.active && 'opacity-50',
                 )}
               >
@@ -118,51 +119,40 @@ export function SystemLogViewer() {
 
           {/* Priority filter */}
           <div className="flex items-center gap-2">
-            <div className="flex gap-1">
-              {PRIORITIES.map(p => (
-                <button
-                  key={p.label}
-                  onClick={() => setPriority(p.value)}
-                  className={clsx(
-                    'rounded-md px-2 py-1 text-[10px] font-medium transition-colors',
-                    priority === p.value
-                      ? 'bg-zinc-700 text-white'
-                      : 'text-zinc-500 active:bg-zinc-800',
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              aria-label="Log priority"
+              className="flex-1"
+              options={PRIORITIES.map(p => ({ value: p.value ?? 'all', label: p.label }))}
+              value={priority ?? 'all'}
+              onChange={v => setPriority(v === 'all' ? undefined : v as typeof priority)}
+            />
             <button
+              type="button"
               onClick={handleRefresh}
               disabled={logsLoading}
-              className="ml-auto rounded-md p-1 text-zinc-500 active:bg-zinc-800"
+              aria-label="Refresh logs"
+              className="grid h-11 w-11 shrink-0 place-items-center text-sky-400 active:opacity-50 disabled:text-zinc-600"
             >
               {logsLoading
-                ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  )
-                : (
-                    <RefreshCw size={12} />
-                  )}
+                ? <Loader2 size={18} className="animate-spin" />
+                : <RefreshCw size={18} />}
             </button>
           </div>
 
           {/* Log output */}
           <div
             ref={scrollRef}
-            className="h-60 overflow-y-auto rounded-xl bg-zinc-950 p-2 font-mono text-[10px] leading-relaxed"
+            className="h-60 overflow-y-auto rounded-lg bg-black p-2.5 font-mono text-[12px] leading-relaxed"
           >
             {logsLoading && logLines.length === 0
               ? (
                   <div className="flex h-full items-center justify-center">
-                    <Loader2 size={16} className="animate-spin text-zinc-600" />
+                    <Loader2 size={18} className="animate-spin text-zinc-600" />
                   </div>
                 )
               : logLines.length === 0
                 ? (
-                    <div className="flex h-full items-center justify-center text-zinc-600">
+                    <div className="flex h-full items-center justify-center font-sans text-[15px] text-zinc-500">
                       No logs found
                     </div>
                   )

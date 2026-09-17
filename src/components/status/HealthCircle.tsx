@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import clsx from 'clsx'
-import { Wifi, Lock, Globe, Droplet, Eye, EyeOff } from 'lucide-react'
+import { ChevronRight, Cpu, Droplet, GitBranch, Globe, Lock, Wifi } from 'lucide-react'
 import { POD_CAPS } from '@/src/hardware/pods'
 import type { PodVersion } from '@/src/hardware/types'
 
@@ -27,6 +27,43 @@ function podModelName(version: string): string {
   return caps?.modelName ?? version
 }
 
+/** One hairline-separated row inside the summary card. */
+function SummaryRow({
+  icon,
+  label,
+  value,
+  valueClassName,
+  onClick,
+  accessory,
+}: {
+  icon: React.ReactNode
+  label: string
+  value?: React.ReactNode
+  valueClassName?: string
+  onClick?: () => void
+  accessory?: React.ReactNode
+}) {
+  const content = (
+    <>
+      <span className="shrink-0 text-zinc-500">{icon}</span>
+      <span className="min-w-0 flex-1 truncate text-[15px] text-white">{label}</span>
+      {value !== undefined && (
+        <span className={clsx('ios-numeric min-w-0 truncate text-[15px]', valueClassName ?? 'text-zinc-500')}>{value}</span>
+      )}
+      {accessory}
+    </>
+  )
+  const className = 'flex min-h-[44px] w-full items-center gap-3 px-4 text-left'
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={clsx(className, 'active:bg-zinc-800')}>
+        {content}
+      </button>
+    )
+  }
+  return <div className={className}>{content}</div>
+}
+
 export function HealthCircle({
   healthy,
   total,
@@ -45,189 +82,149 @@ export function HealthCircle({
   const [showHardwareInfo, setShowHardwareInfo] = useState(false)
   const progress = total > 0 ? healthy / total : 0
   const allHealthy = healthy === total && total > 0
-  const circumference = 2 * Math.PI * 18
+  const radius = 25
+  const circumference = 2 * Math.PI * radius
+
+  const waterValue = isPriming
+    ? 'Priming…'
+    : waterLevel
+      ? (waterLevel === 'ok' ? 'OK' : 'Low')
+      : 'Unknown'
+  const waterColor = isPriming
+    ? 'text-sky-400'
+    : waterLevel === 'low'
+      ? 'text-amber-400'
+      : waterLevel === 'ok'
+        ? 'text-emerald-400'
+        : 'text-zinc-500'
+
+  const wifiColor = wifiSignal === undefined
+    ? 'text-zinc-500'
+    : wifiSignal > 60 ? 'text-zinc-500' : wifiSignal > 30 ? 'text-amber-400' : 'text-red-400'
 
   return (
-    <div className="rounded-2xl bg-zinc-900/80 p-3 sm:p-4">
-      {/* Row 1: Health ring + sleepypod + pod model */}
-      <div className="flex items-center gap-3">
-        <div className="relative h-11 w-11 shrink-0">
-          <svg viewBox="0 0 40 40" className="h-full w-full -rotate-90">
-            <circle cx="20" cy="20" r="18" fill="none" stroke="#222" strokeWidth="3.5" />
+    <div className="overflow-hidden rounded-xl bg-zinc-900 [&>*+*]:border-t [&>*+*]:border-zinc-800">
+      {/* Summary: ring + name + healthy count */}
+      <div className="flex items-center gap-4 px-4 py-4">
+        <div className="relative h-14 w-14 shrink-0">
+          <svg viewBox="0 0 56 56" className="h-full w-full -rotate-90">
+            <circle cx="28" cy="28" r={radius} fill="none" stroke="#2C2C2E" strokeWidth="3" />
             <circle
-              cx="20"
-              cy="20"
-              r="18"
+              cx="28"
+              cy="28"
+              r={radius}
               fill="none"
-              stroke={allHealthy ? '#34d399' : '#f59e0b'}
-              strokeWidth="3.5"
+              stroke={allHealthy ? 'var(--color-emerald-500, #30D158)' : 'var(--color-amber-500, #FF9F0A)'}
+              strokeWidth="3"
               strokeLinecap="round"
               strokeDasharray={circumference}
               strokeDashoffset={circumference * (1 - progress)}
               className="transition-all duration-500"
             />
           </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
+          <span className="ios-numeric absolute inset-0 flex items-center justify-center text-[17px] font-semibold text-white">
             {healthy}
           </span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-white">sleepypod</span>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[17px] font-semibold text-white">sleepypod</span>
             {podVersion && (
-              <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-400">
-                {podModelName(podVersion)}
-              </span>
+              <span className="truncate text-[15px] text-zinc-500">{podModelName(podVersion)}</span>
             )}
           </div>
-          <p className="text-xs text-zinc-400">
-            {healthy}
-            {' '}
-            of
-            {total}
-            {' '}
-            services healthy
+          <p className="ios-numeric text-[15px] text-zinc-500">
+            {allHealthy ? 'All ' : ''}
+            {allHealthy ? `${total} services healthy` : `${healthy} of ${total} services healthy`}
           </p>
         </div>
       </div>
 
-      {/* Row 2: Connection — IP + wifi + internet */}
-      {(podIP || wifiSignal !== undefined || internetBlocked !== undefined) && (
-        <>
-          <div className="my-2.5 border-t border-zinc-800" />
-          <div className="flex items-center gap-2 text-xs">
-            {podIP && (
-              <span className="flex items-center gap-1 text-zinc-400">
-                <span className="text-emerald-400">&#x2713;</span>
-                <span className="font-mono text-[11px]">{podIP}</span>
-              </span>
-            )}
-            <span className="flex-1" />
-            {wifiSignal !== undefined && (
-              <span className={clsx(
-                'flex items-center gap-1',
-                wifiSignal > 60 ? 'text-zinc-400' : wifiSignal > 30 ? 'text-amber-400' : 'text-red-400',
-              )}
-              >
-                <Wifi size={10} />
-                <span className="text-[10px]">
-                  {wifiSsid ?? 'WiFi'}
-                  {' '}
-                  {wifiSignal}
-                  %
-                </span>
-              </span>
-            )}
-            {internetBlocked !== undefined && (
-              <>
-                <span className="text-zinc-700">&middot;</span>
-                {internetBlocked
+      {/* Connection */}
+      {podIP && (
+        <SummaryRow
+          icon={<Globe size={18} />}
+          label="Address"
+          value={podIP}
+        />
+      )}
+      {(wifiSignal !== undefined || internetBlocked !== undefined) && (
+        <SummaryRow
+          icon={<Wifi size={18} />}
+          label={wifiSsid ?? 'Wi-Fi'}
+          value={(
+            <span className="flex items-center gap-2">
+              {wifiSignal !== undefined && <span className={wifiColor}>{`${wifiSignal}%`}</span>}
+              {internetBlocked !== undefined && (
+                internetBlocked
                   ? (
-                      <span className="flex items-center gap-1 text-[10px] text-emerald-400">
-                        <Lock size={10} />
-                        {' '}
+                      <span className="flex items-center gap-1 text-zinc-500">
+                        <Lock size={13} />
                         Local only
                       </span>
                     )
                   : (
-                      <span className="flex items-center gap-1 text-[10px] text-amber-400">
-                        <Globe size={10} />
-                        {' '}
-                        Internet
-                      </span>
-                    )}
-              </>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Row 3: Water + Calibration + branch/version */}
-      <>
-        <div className="my-2.5 border-t border-zinc-800" />
-        <div className="flex items-center gap-2">
-          {/* Water status — tappable */}
-          {isPriming
-            ? (
-                <button onClick={onWaterClick} className="flex items-center gap-1 text-[10px] text-sky-400 active:opacity-70">
-                  <Droplet size={10} />
-                  {' '}
-                  Priming...
-                </button>
-              )
-            : waterLevel
-              ? (
-                  <button
-                    onClick={onWaterClick}
-                    className={clsx(
-                      'flex items-center gap-1 text-[10px] active:opacity-70',
-                      waterLevel === 'low' ? 'text-amber-400' : 'text-emerald-400',
-                    )}
-                  >
-                    <Droplet size={10} />
-                    {' '}
-                    Water
-                    {' '}
-                    {waterLevel === 'ok' ? 'OK' : 'Low'}
-                  </button>
-                )
-              : (
-                  <button onClick={onWaterClick} className="flex items-center gap-1 text-[10px] text-zinc-500 active:opacity-70">
-                    <Droplet size={10} />
-                    {' '}
-                    Water
-                  </button>
-                )}
-
-          <span className="flex-1" />
-
-          {/* Branch chip */}
-          {branch && (
-            <span className="rounded-full bg-zinc-800 px-2 py-1 text-[10px] font-medium text-zinc-400">
-              &#x2387;
-              {' '}
-              {branch}
-              {commitHash && (
-                <span className="ml-1 text-zinc-500">{commitHash.slice(0, 7)}</span>
+                      <span className="text-amber-400">Internet</span>
+                    )
               )}
             </span>
           )}
-        </div>
-      </>
+        />
+      )}
 
-      {/* Row 4: Hardware info — hidden by default */}
+      {/* Water — tappable, opens the water & priming sheet */}
+      <SummaryRow
+        icon={<Droplet size={18} />}
+        label="Water"
+        value={waterValue}
+        valueClassName={waterColor}
+        onClick={onWaterClick}
+        accessory={<ChevronRight size={18} className="shrink-0 text-zinc-600" />}
+      />
+
+      {/* Build */}
+      {branch && (
+        <SummaryRow
+          icon={<GitBranch size={18} />}
+          label="Build"
+          value={commitHash ? `${branch} · ${commitHash.slice(0, 7)}` : branch}
+        />
+      )}
+
+      {/* Hardware info — hidden by default */}
       {podVersion && (
-        <>
-          <div className="my-2.5 border-t border-zinc-800" />
-          <div className="space-y-1.5">
-            <button
-              onClick={() => setShowHardwareInfo(v => !v)}
-              className="flex items-center gap-1.5 text-[10px] text-zinc-500 active:opacity-70"
-            >
-              {showHardwareInfo ? <EyeOff size={10} /> : <Eye size={10} />}
-              Hardware Info
-            </button>
-            {showHardwareInfo && (
-              <div className="space-y-1 rounded-lg bg-zinc-800/50 px-2.5 py-2 text-[10px]">
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Pod Version</span>
-                  <span className="font-mono text-zinc-300">{podVersion}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Model</span>
-                  <span className="text-zinc-300">{podModelName(podVersion)}</span>
-                </div>
-                {sensorLabel && (
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500">Serial</span>
-                    <span className="font-mono text-zinc-300">{sensorLabel}</span>
-                  </div>
-                )}
-              </div>
+        <div>
+          <SummaryRow
+            icon={<Cpu size={18} />}
+            label="Hardware info"
+            onClick={() => setShowHardwareInfo(v => !v)}
+            accessory={(
+              <ChevronRight
+                size={18}
+                className={clsx('shrink-0 text-zinc-600 transition-transform duration-200', showHardwareInfo && 'rotate-90')}
+              />
             )}
-          </div>
-        </>
+          />
+          {showHardwareInfo && (
+            <div className="space-y-1 px-4 pb-3 pl-[46px] text-[15px]">
+              <div className="flex justify-between gap-3">
+                <span className="text-zinc-500">Pod version</span>
+                <span className="font-mono text-zinc-300">{podVersion}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-zinc-500">Model</span>
+                <span className="text-zinc-300">{podModelName(podVersion)}</span>
+              </div>
+              {sensorLabel && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-zinc-500">Serial</span>
+                  <span className="truncate font-mono text-zinc-300">{sensorLabel}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

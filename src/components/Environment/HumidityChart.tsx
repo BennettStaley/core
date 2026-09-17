@@ -20,6 +20,9 @@ interface HumidityChartProps {
   data: HumidityDataPoint[]
 }
 
+const LINE_COLOR = '#0A84FF'
+const AXIS_TICK = { fill: '#8E8E93', fontSize: 11 }
+
 function formatTime(timestamp: string | Date): string {
   const d = new Date(timestamp)
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -44,8 +47,8 @@ export function HumidityChart({ data }: HumidityChartProps) {
 
   if (chartData.length === 0) {
     return (
-      <div className="flex h-[140px] items-center justify-center text-sm text-zinc-500">
-        No humidity data available
+      <div className="flex h-[140px] items-center justify-center text-[15px] text-zinc-500">
+        No humidity data
       </div>
     )
   }
@@ -53,35 +56,39 @@ export function HumidityChart({ data }: HumidityChartProps) {
   return (
     <div className="h-[140px] w-full">
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-        <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+        <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#4a90d9" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#4a90d9" stopOpacity={0.02} />
+              <stop offset="0%" stopColor={LINE_COLOR} stopOpacity={0.15} />
+              <stop offset="100%" stopColor={LINE_COLOR} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.5} />
+          <CartesianGrid stroke="#2C2C2E" vertical={false} />
           <XAxis
             dataKey="time"
             type="number"
             domain={['dataMin', 'dataMax']}
             tickFormatter={(v: number) => formatTime(new Date(v))}
-            tick={{ fill: '#71717a', fontSize: 10 }}
-            stroke="#333"
+            tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
             tickCount={4}
+            minTickGap={28}
           />
           <YAxis
             domain={[0, 100]}
-            tick={{ fill: '#71717a', fontSize: 10 }}
-            stroke="#333"
+            ticks={[0, 50, 100]}
+            tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
             tickFormatter={(v: number) => `${v}%`}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #333',
-              borderRadius: 8,
-              fontSize: 12,
+              backgroundColor: '#2C2C2E',
+              border: 'none',
+              borderRadius: 10,
+              fontSize: 13,
               color: '#fff',
             }}
             labelFormatter={v => formatTime(new Date(v as number))}
@@ -90,11 +97,11 @@ export function HumidityChart({ data }: HumidityChartProps) {
           <Area
             type="monotone"
             dataKey="humidity"
-            stroke="#4a90d9"
-            strokeWidth={1.5}
+            stroke={LINE_COLOR}
+            strokeWidth={2}
             fill={`url(#${gradientId})`}
             dot={false}
-            activeDot={{ r: 3, fill: '#4a90d9' }}
+            activeDot={{ r: 3, fill: LINE_COLOR }}
             connectNulls
           />
         </AreaChart>

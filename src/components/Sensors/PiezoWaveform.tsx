@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useOnSensorFrame, useSensorStream, type PiezoDualFrame, type SensorFrame } from '@/src/hooks/useSensorStream'
+import { CardTitle } from './CardTitle'
 
 /** Maximum samples to keep in the waveform buffer per channel. */
 const MAX_SAMPLES = 1500
@@ -12,15 +13,15 @@ const MIN_SAMPLES = 20
 /** Canvas height in CSS pixels. */
 const CANVAS_HEIGHT = 160
 /** Left channel color (matches iOS). */
-const LEFT_COLOR = '#4a9eff'
+const LEFT_COLOR = '#0A84FF'
 /** Right channel color (matches iOS). */
-const RIGHT_COLOR = '#40e0d0'
+const RIGHT_COLOR = '#40C8E0'
 /** Minor grid line color (matching iOS "0a1018"). */
-const GRID_MINOR_COLOR = '#0a1018'
+const GRID_MINOR_COLOR = '#151517'
 /** Major grid line color (matching iOS "0f1a2a"). */
-const GRID_MAJOR_COLOR = '#1a2a3a'
+const GRID_MAJOR_COLOR = '#2C2C2E'
 /** Background color. */
-const BG_COLOR = '#09090b'
+const BG_COLOR = '#0B0B0C'
 
 // ---------------------------------------------------------------------------
 // Catmull-Rom interpolation helpers (matching iOS tracePath)
@@ -326,10 +327,10 @@ export function PiezoWaveform() {
 
       if (!hasDataRef.current) {
         // "No data" text
-        ctx.fillStyle = '#52525b'
-        ctx.font = `${12 * dpr}px system-ui, sans-serif`
+        ctx.fillStyle = '#8E8E93'
+        ctx.font = `${15 * dpr}px system-ui, sans-serif`
         ctx.textAlign = 'center'
-        ctx.fillText('Waiting for piezo data…', w / 2, h / 2)
+        ctx.fillText('Waiting for piezo data', w / 2, h / 2)
         animFrameRef.current = requestAnimationFrame(render)
         return
       }
@@ -343,10 +344,10 @@ export function PiezoWaveform() {
 
       if (visibleLeft.length < MIN_SAMPLES && visibleRight.length < MIN_SAMPLES) {
         // Not enough data yet
-        ctx.fillStyle = '#52525b'
-        ctx.font = `${11 * dpr}px system-ui, sans-serif`
+        ctx.fillStyle = '#8E8E93'
+        ctx.font = `${15 * dpr}px system-ui, sans-serif`
         ctx.textAlign = 'center'
-        ctx.fillText('Collecting samples…', w / 2, h / 2)
+        ctx.fillText('Collecting samples', w / 2, h / 2)
         animFrameRef.current = requestAnimationFrame(render)
         return
       }
@@ -371,8 +372,8 @@ export function PiezoWaveform() {
 
       // Frequency label (top-right)
       if (freqRef.current > 0) {
-        ctx.fillStyle = '#52525b'
-        const fontSize = 10 * dpr
+        ctx.fillStyle = '#8E8E93'
+        const fontSize = 11 * dpr
         ctx.font = `${fontSize}px monospace`
         ctx.textAlign = 'right'
         ctx.fillText(`${freqRef.current} Hz`, w - 8 * dpr, 16 * dpr)
@@ -391,59 +392,20 @@ export function PiezoWaveform() {
   }, [showLeft, showRight])
 
   return (
-    <div className="space-y-2">
-      {/* Header with title and legend/toggles */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <svg
-            className="h-3.5 w-3.5 text-blue-400"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M2 12h2l3-7 4 14 4-10 3 3h4" />
-          </svg>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-            Piezo Waveform
-          </h3>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowLeft(v => !v)}
-            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${
-              showLeft
-                ? 'bg-[#4a9eff]/15 text-[#4a9eff]'
-                : 'bg-zinc-800 text-zinc-500'
-            }`}
-          >
-            <span
-              className="inline-block h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: showLeft ? LEFT_COLOR : '#52525b' }}
-            />
-            Left
-          </button>
-          <button
-            onClick={() => setShowRight(v => !v)}
-            className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${
-              showRight
-                ? 'bg-[#40e0d0]/15 text-[#40e0d0]'
-                : 'bg-zinc-800 text-zinc-500'
-            }`}
-          >
-            <span
-              className="inline-block h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: showRight ? RIGHT_COLOR : '#52525b' }}
-            />
-            Right
-          </button>
-        </div>
-      </div>
+    <div className="space-y-3">
+      {/* Header with title and channel toggles */}
+      <CardTitle
+        title="Piezo waveform"
+        trailing={(
+          <>
+            <ChannelToggle label="Left" color={LEFT_COLOR} on={showLeft} onClick={() => setShowLeft(v => !v)} />
+            <ChannelToggle label="Right" color={RIGHT_COLOR} on={showRight} onClick={() => setShowRight(v => !v)} />
+          </>
+        )}
+      />
 
       {/* Canvas waveform display */}
-      <div ref={containerRef} className="overflow-hidden rounded-xl border border-[#1a2a3a]/50 bg-[#020208]">
+      <div ref={containerRef} className="overflow-hidden rounded-lg" style={{ background: BG_COLOR }}>
         <canvas
           ref={canvasRef}
           style={{ width: '100%', height: `${CANVAS_HEIGHT}px`, display: 'block' }}
@@ -451,54 +413,45 @@ export function PiezoWaveform() {
       </div>
 
       {/* Sample count footer */}
-      <div className="flex justify-between text-[10px] text-zinc-600">
-        <span>
-          L:
-          {sampleCounts.left}
-          {' '}
-          samples
-        </span>
-        <span>
-          R:
-          {sampleCounts.right}
-          {' '}
-          samples
-        </span>
+      <div className="ios-numeric flex justify-between text-[13px] text-zinc-500">
+        <span>{`Left ${sampleCounts.left} samples`}</span>
+        <span>{`Right ${sampleCounts.right} samples`}</span>
       </div>
 
       {/* Timeline scrubber */}
       {timeRange && (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[10px] text-zinc-500">
+        <div className="space-y-1 border-t border-zinc-800 pt-2">
+          <div className="flex min-h-[32px] items-center justify-between">
+            <div className="flex items-center gap-2 text-[15px] text-zinc-500">
               {isLive
                 ? (
                     <>
-                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-emerald-400 font-medium">Live</span>
+                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+                      <span className="text-white">Live</span>
                     </>
                   )
                 : (
                     <>
-                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-zinc-500" />
-                      <span>{scrubValue !== null ? formatTime(scrubValue) : ''}</span>
+                      <span className="inline-block h-2 w-2 rounded-full bg-zinc-500" />
+                      <span className="ios-numeric text-white">{scrubValue !== null ? formatTime(scrubValue) : ''}</span>
                     </>
                   )}
               {isSeeking && (
-                <span className="ml-1 text-amber-400">seeking...</span>
+                <span className="text-[13px] text-zinc-500">Seeking…</span>
               )}
             </div>
             {!isLive && (
               <button
+                type="button"
                 onClick={handleGoLive}
-                className="rounded px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 bg-emerald-400/10 hover:bg-emerald-400/20 transition-colors"
+                className="min-h-[44px] px-1 text-[15px] text-sky-400 active:opacity-50"
               >
                 Go live
               </button>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[9px] text-zinc-600 tabular-nums shrink-0">
+            <span className="ios-numeric shrink-0 text-[11px] text-zinc-500">
               {formatTime(timeRange.min)}
             </span>
             <input
@@ -508,17 +461,33 @@ export function PiezoWaveform() {
               step={1}
               value={scrubValue ?? timeRange.max}
               onChange={handleScrub}
-              className="h-1 w-full cursor-pointer appearance-none rounded-full bg-zinc-800 accent-blue-500
-                [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3
+              aria-label="Seek piezo history"
+              className="h-1 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-sky-500
+                [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6
                 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full
-                [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:shadow-sm"
+                [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow"
             />
-            <span className="text-[9px] text-zinc-600 tabular-nums shrink-0">
+            <span className="ios-numeric shrink-0 text-[11px] text-zinc-500">
               {formatTime(timeRange.max)}
             </span>
           </div>
         </div>
       )}
     </div>
+  )
+}
+
+/** Quiet channel visibility toggle: coloured dot + label, dimmed when hidden. */
+function ChannelToggle({ label, color, on, onClick }: { label: string, color: string, on: boolean, onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={`flex min-h-[32px] items-center gap-1.5 rounded-full px-2.5 text-[13px] transition-colors ${on ? 'bg-zinc-800 text-white' : 'text-zinc-500'}`}
+    >
+      <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: on ? color : '#48484A' }} />
+      {label}
+    </button>
   )
 }

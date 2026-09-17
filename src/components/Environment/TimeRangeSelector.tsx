@@ -1,14 +1,14 @@
 'use client'
 
-import { cn } from '@/lib/utils'
+import { SegmentedControl } from '@/src/ui/ios'
 
 export type TimeRange = '1h' | '6h' | '12h' | '24h'
 
 const ranges: { value: TimeRange, label: string }[] = [
-  { value: '1h', label: '1H' },
-  { value: '6h', label: '6H' },
-  { value: '12h', label: '12H' },
-  { value: '24h', label: '24H' },
+  { value: '1h', label: '1h' },
+  { value: '6h', label: '6h' },
+  { value: '12h', label: '12h' },
+  { value: '24h', label: '24h' },
 ]
 
 export function getDateRangeFromTimeRange(range: TimeRange): { startDate: Date, endDate: Date } {
@@ -21,25 +21,17 @@ export function getDateRangeFromTimeRange(range: TimeRange): { startDate: Date, 
 interface TimeRangeSelectorProps {
   value: TimeRange
   onChange: (range: TimeRange) => void
+  className?: string
 }
 
-export function TimeRangeSelector({ value, onChange }: TimeRangeSelectorProps) {
+export function TimeRangeSelector({ value, onChange, className }: TimeRangeSelectorProps) {
   return (
-    <div className="flex gap-1 rounded-lg bg-zinc-900 p-1">
-      {ranges.map(range => (
-        <button
-          key={range.value}
-          onClick={() => onChange(range.value)}
-          className={cn(
-            'rounded-md px-3 min-h-[44px] flex items-center justify-center text-xs font-semibold transition-colors',
-            value === range.value
-              ? 'bg-zinc-700 text-white'
-              : 'text-zinc-500 active:bg-zinc-800',
-          )}
-        >
-          {range.label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      aria-label="Time range"
+      options={ranges}
+      value={value}
+      onChange={onChange}
+      className={className}
+    />
   )
 }

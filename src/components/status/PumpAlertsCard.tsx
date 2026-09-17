@@ -62,33 +62,26 @@ export function PumpAlertsCard() {
   if (activeAlerts.length === 0) return null
 
   return (
-    <div className="rounded-2xl bg-zinc-900/80 p-4 space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <AlertTriangle size={16} className="text-red-400" />
-          <span className="text-sm font-medium text-white">Pump Alerts</span>
-        </div>
+    <section className="space-y-1.5">
+      <div className="flex items-baseline justify-between px-4">
+        <h2 className="text-[13px] leading-[18px] text-zinc-500">Pump alerts</h2>
         {activeAlerts.length > 1 && (
           <button
+            type="button"
             onClick={handleDismissAll}
             disabled={dismissAlertMutation.isPending}
-            className="rounded-lg px-2 py-1 text-[11px] text-zinc-400 transition-colors active:bg-zinc-800 disabled:opacity-50"
+            className="text-[15px] text-sky-400 active:opacity-50 disabled:opacity-40"
           >
             Dismiss all
           </button>
         )}
       </div>
 
-      {/* Active alert rows */}
-      <div className="space-y-1.5">
+      <div className="overflow-hidden rounded-xl bg-zinc-900 [&>*+*]:border-t [&>*+*]:border-zinc-800">
         {activeAlerts.map(alert => (
-          <div
-            key={alert.id}
-            className="flex items-center gap-2 rounded-lg bg-red-900/20 px-3 py-2"
-          >
-            <AlertTriangle size={12} className="shrink-0 text-red-400" />
-            <span className="flex-1 text-[11px] text-red-300">
+          <div key={alert.id} className="flex min-h-[44px] items-center gap-3 pl-4 pr-1">
+            <AlertTriangle size={18} className="shrink-0 text-red-400" />
+            <span className="ios-numeric min-w-0 flex-1 py-2.5 text-[15px] text-white">
               {alert.side === 'left' ? 'Left' : alert.side === 'right' ? 'Right' : 'Both'}
               {' — '}
               {alert.rpm != null ? `${alert.rpm} rpm` : alert.type}
@@ -96,20 +89,21 @@ export function PumpAlertsCard() {
               {formatAge(alert.timestamp)}
             </span>
             <button
+              type="button"
               onClick={() => handleDismissAlert(alert.id)}
               disabled={dismissAlertMutation.isPending}
               aria-label={`Dismiss pump alert ${alert.id}`}
-              className="shrink-0 rounded p-1 text-zinc-500 active:bg-zinc-700"
+              className="grid h-11 w-11 shrink-0 place-items-center text-zinc-500 active:opacity-50"
             >
-              <X size={12} />
+              <X size={18} />
             </button>
           </div>
         ))}
       </div>
 
-      <p className="text-[10px] text-zinc-600">
+      <p className="px-4 text-[13px] leading-[18px] text-zinc-500">
         Unresolved alerts re-block their side at the next service restart. Dismiss alerts that no longer reflect the pump&apos;s state.
       </p>
-    </div>
+    </section>
   )
 }
