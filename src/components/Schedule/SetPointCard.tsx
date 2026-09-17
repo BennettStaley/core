@@ -1,126 +1,74 @@
 'use client'
 
-import { Minus, Plus, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import type { SchedulePhase } from '@/src/hooks/useSchedules'
 import { formatTime12h } from './TimeInput'
-import { colorForTempF } from '@/src/lib/sleepCurve/tempColor'
 import { useTemperatureUnit } from '@/src/hooks/useTemperatureUnit'
 import { formatSetpointF } from '@/src/lib/tempUtils'
+import { Stepper } from './EditorRows'
+import { tempTint } from './scheduleFormat'
 
 interface SetPointCardProps {
   phase: SchedulePhase
   onAdjustTemp: (id: number, delta: number) => void
-  onDelete: (id: number) => void
+  /**
+   * Kept for API compatibility. Deleting now happens from the set point
+   * sheet (tap the row) rather than an inline trash icon.
+   */
+  onDelete?: (id: number) => void
   onTapCard: (phase: SchedulePhase) => void
   disabled?: boolean
-  /** Optional badge shown next to the time (e.g. "Auto on", "Auto off") */
+  /** Optional caption under the time (e.g. "Auto on", "Auto off") */
   autoLabel?: 'on' | 'off' | null
 }
 
 /**
- * Vertical set point row — time, colored temp, +/- controls, delete.
+ * Set point as a grouped-list row: time (tap to edit), tinted temperature
+ * and a UIStepper for quick ±2° nudges.
  */
 export function SetPointCard({
   phase,
   onAdjustTemp,
-  onDelete,
   onTapCard,
   disabled = false,
   autoLabel = null,
 }: SetPointCardProps) {
   const { unit } = useTemperatureUnit()
-  const tempColor = colorForTempF(phase.temperature)
 
   return (
     <div
       className={clsx(
-        'flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 transition-opacity',
+        'flex min-h-[44px] items-center gap-3 px-4 py-1.5 transition-opacity',
         !phase.enabled && 'opacity-40',
         disabled && 'opacity-60',
       )}
-      onClick={() => {
-        if (!disabled) onTapCard(phase)
-      }}
-      role="button"
-      aria-disabled={disabled}
-      tabIndex={disabled ? -1 : 0}
-      onKeyDown={(e) => {
-        if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault()
-          onTapCard(phase)
-        }
-      }}
     >
-      {/* Time */}
-      <div className="min-w-[60px]">
-        <span className="text-sm font-medium text-zinc-300">
-          {formatTime12h(phase.time)}
+      <button
+        type="button"
+        onClick={() => onTapCard(phase)}
+        disabled={disabled}
+        aria-label={`Edit set point at ${formatTime12h(phase.time)}`}
+        className="-my-1.5 -ml-4 flex min-h-[44px] min-w-0 flex-1 items-center gap-3 py-1.5 pl-4 text-left"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="ios-numeric block text-[17px] leading-[22px] text-white">{formatTime12h(phase.time)}</span>
+          {autoLabel && (
+            <span className="block text-[13px] leading-[18px] text-zinc-500">
+              {autoLabel === 'on' ? 'Pod turns on' : 'Pod turns off'}
+            </span>
+          )}
         </span>
-      </div>
-
-      {/* Temp indicator dot + value */}
-      <div className="flex items-center gap-1.5">
-        <span
-          className="inline-block h-2 w-2 rounded-full"
-          style={{ backgroundColor: tempColor }}
-        />
-        <span className="text-sm font-bold tabular-nums text-white">
+        <span className="ios-numeric shrink-0 text-[17px]" style={{ color: tempTint(phase.temperature) }}>
           {formatSetpointF(phase.temperature, unit)}
         </span>
-      </div>
-
-      {/* Auto on/off badge */}
-      {autoLabel && (
-        <span
-          className={clsx(
-            'rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide',
-            autoLabel === 'on'
-              ? 'bg-emerald-500/10 text-emerald-400'
-              : 'bg-zinc-700/50 text-zinc-400',
-          )}
-        >
-          Auto
-          {' '}
-          {autoLabel === 'on' ? 'on' : 'off'}
-        </span>
-      )}
-
-      {/* Spacer */}
-      <div className="flex-1" />
-
-      {/* +/- controls */}
-      <div className="flex items-center gap-0" onClick={e => e.stopPropagation()}>
-        <button
-          onClick={() => onAdjustTemp(phase.id, -2)}
-          disabled={disabled || phase.temperature <= 55}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition-colors active:text-zinc-200 disabled:opacity-30"
-          aria-label="Decrease temperature"
-        >
-          <Minus size={12} strokeWidth={3} />
-        </button>
-        <button
-          onClick={() => onAdjustTemp(phase.id, 2)}
-          disabled={disabled || phase.temperature >= 110}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition-colors active:text-zinc-200 disabled:opacity-30"
-          aria-label="Increase temperature"
-        >
-          <Plus size={12} strokeWidth={3} />
-        </button>
-      </div>
-
-      {/* Delete */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onDelete(phase.id)
-        }}
-        disabled={disabled}
-        className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-600 transition-colors active:text-red-400 disabled:opacity-30"
-        aria-label={`Delete ${phase.name}`}
-      >
-        <Trash2 size={12} />
       </button>
+      <Stepper
+        label="temperature"
+        onDecrement={() => onAdjustTemp(phase.id, -2)}
+        onIncrement={() => onAdjustTemp(phase.id, 2)}
+        decrementDisabled={disabled || phase.temperature <= 55}
+        incrementDisabled={disabled || phase.temperature >= 110}
+      />
     </div>
   )
 }
@@ -128,13 +76,13 @@ export function SetPointCard({
 interface SetPointListProps {
   phases: SchedulePhase[]
   onAdjustTemp: (id: number, delta: number) => void
-  onDelete: (id: number) => void
+  onDelete?: (id: number) => void
   onTapCard: (phase: SchedulePhase) => void
   disabled?: boolean
 }
 
 /**
- * Vertical list of set point rows.
+ * Grouped list of set point rows.
  */
 export function SetPointList({
   phases,
@@ -144,7 +92,7 @@ export function SetPointList({
   disabled = false,
 }: SetPointListProps) {
   return (
-    <div className="space-y-1.5">
+    <div className="overflow-hidden rounded-xl bg-zinc-900 [&>*+*]:border-t [&>*+*]:border-zinc-800">
       {phases.map(phase => (
         <SetPointCard
           key={phase.id}

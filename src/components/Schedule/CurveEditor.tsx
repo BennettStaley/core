@@ -1,14 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Snowflake, Scale, Flame, X, Minus, Moon, Sun, Loader2, Sparkles } from 'lucide-react'
-import clsx from 'clsx'
+import { ChevronRight, Flame, Scale, Snowflake, Sparkles } from 'lucide-react'
+import { ListRow, ListSection, Sheet } from '@/src/ui/ios'
 import { AICurveWizard } from './AICurveWizard'
 import { CurveChart } from './CurveChart'
 import { SetPointCard } from './SetPointCard'
 import { SetPointEditor } from './SetPointEditor'
 import { TimeInput } from './TimeInput'
-import { DAYS, type DayOfWeek } from './DaySelector'
+import { DAYS, DayPicker, type DayOfWeek } from './DaySelector'
+import { ConfirmDialog } from './ConfirmDialog'
+import { AddRow, DestructiveRow, SheetAction, StepperRow } from './EditorRows'
+import { tempTint } from './scheduleFormat'
 import { useSchedule } from '@/src/hooks/useSchedule'
 import type { SchedulePhase } from '@/src/hooks/useSchedules'
 import type { CurvePoint, CoolingIntensity } from '@/src/lib/sleepCurve/types'
@@ -29,6 +32,8 @@ interface CurveEditorProps {
   initialDays?: DayOfWeek[]
   /** Initial set points. Empty array = create mode with empty list. */
   initialSetPoints?: Array<{ time: string, temperature: number }>
+  /** Edit mode only: shows a destructive "Delete Curve" row. The parent confirms and deletes. */
+  onDelete?: () => void
 }
 
 interface LocalSetPoint {
@@ -40,13 +45,14 @@ interface LocalSetPoint {
 interface PresetDef {
   id: CoolingIntensity
   label: string
+  description: string
   icon: typeof Snowflake
 }
 
 const PRESETS: PresetDef[] = [
-  { id: 'cool', label: 'Hot Sleeper', icon: Snowflake },
-  { id: 'balanced', label: 'Balanced', icon: Scale },
-  { id: 'warm', label: 'Cold Sleeper', icon: Flame },
+  { id: 'cool', label: 'Hot sleeper', description: 'Cooler through the night', icon: Snowflake },
+  { id: 'balanced', label: 'Balanced', description: 'Cool for deep sleep, warm to wake', icon: Scale },
+  { id: 'warm', label: 'Cold sleeper', description: 'Stays warmer overall', icon: Flame },
 ]
 
 const DEFAULT_BEDTIME = '22:00'
@@ -98,7 +104,7 @@ function buildCurveData(points: LocalSetPoint[]) {
 }
 
 /**
- * Full-screen editor for creating or editing a curve.
+ * Sheet for creating or editing a curve.
  * Local state until "Save" — then writes via `useSchedule.saveCurve` (one batch).
  */
 export function CurveEditor({
@@ -106,6 +112,7 @@ export function CurveEditor({
   onClose,
   initialDays = [],
   initialSetPoints = [],
+  onDelete,
 }: CurveEditorProps) {
   const { saveCurve, detectCurveConflicts, isMutating } = useSchedule()
   const { unit } = useTemperatureUnit()
@@ -162,16 +169,6 @@ export function CurveEditor({
 
     setAIWizardOpen(false)
   }, [open, initialDays, initialSetPoints, initialBedtime, initialWake, initialMinTemp, initialMaxTemp])
-
-  // Lock body scroll when open
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
 
   const curveData = useMemo(() => buildCurveData(points), [points])
 
@@ -327,195 +324,124 @@ export function CurveEditor({
     }
   }, [days, points, initialDays, detectCurveConflicts, saveCurve, onClose])
 
-  if (!open) return null
-
   const editingPhase = editingId !== null ? orderedPhases.find(p => p.id === editingId) ?? null : null
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <button
-          onClick={onClose}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 active:bg-zinc-800"
-          aria-label="Cancel"
-        >
-          <X size={18} />
-        </button>
-        <span className="text-sm font-medium text-white">
-          {isEdit ? 'Edit Curve' : 'New Curve'}
-        </span>
-        <button
-          onClick={() => void performSave()}
-          disabled={isMutating || days.size === 0 || points.length === 0}
-          className="flex items-center gap-1.5 rounded-full bg-sky-500 px-4 py-1.5 text-xs font-semibold text-white active:bg-sky-600 disabled:opacity-60"
-        >
-          {isMutating && <Loader2 size={12} className="animate-spin" />}
-          {isMutating ? 'Saving…' : 'Save'}
-        </button>
-      </div>
-
-      {/* Day picker */}
-      <div className="border-b border-zinc-800 px-4 pt-3 pb-5">
-        <p className="mb-2 text-[11px] uppercase tracking-wider text-zinc-500">Days</p>
-        <div className="flex items-center justify-between gap-1">
-          {DAYS.map(({ key, short, label }) => {
-            const isOn = days.has(key)
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => toggleDay(key)}
-                aria-pressed={isOn}
-                aria-label={label}
-                className={clsx(
-                  'flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold transition-colors',
-                  isOn ? 'bg-sky-500 text-white' : 'bg-zinc-900 text-zinc-500 active:bg-zinc-800',
-                )}
-              >
-                {short}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Bedtime / Wake — drives preset generation and Pod auto on/off */}
-      <div className="border-b border-zinc-800 px-4 py-3">
-        <p className="mb-2 text-[11px] uppercase tracking-wider text-zinc-500">
-          Sleep window
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <TimeInput
-            label="Bedtime"
-            value={bedtime}
-            onChange={handleBedtimeChange}
-            icon={<Moon size={12} />}
-            accentClass="text-purple-400"
-          />
-          <TimeInput
-            label="Wake up"
-            value={wakeTime}
-            onChange={handleWakeTimeChange}
-            icon={<Sun size={12} />}
-            accentClass="text-amber-400"
-          />
-        </div>
-      </div>
-
-      {/* Min / Max temp — drives preset generation */}
-      <div className="border-b border-zinc-800 px-4 py-3">
-        <p className="mb-2 text-[11px] uppercase tracking-wider text-zinc-500">
-          Temperature range
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <TempStepper
-            label="Coolest"
-            value={minTemp}
-            onChange={v => setMinTemp(Math.min(v, maxTemp - 2))}
-            unit={unit}
-            icon={<Snowflake size={12} />}
-            accentClass="text-blue-400"
-          />
-          <TempStepper
-            label="Warmest"
-            value={maxTemp}
-            onChange={v => setMaxTemp(Math.max(v, minTemp + 2))}
-            unit={unit}
-            icon={<Flame size={12} />}
-            accentClass="text-orange-400"
-          />
-        </div>
-      </div>
-
-      {/* Chart preview */}
-      {curveData && (
-        <div className="shrink-0 border-b border-zinc-800 bg-zinc-900/40 px-3 pt-4 pb-3 mt-2">
-          <CurveChart
-            points={curveData.points}
-            bedtimeMinutes={curveData.bedtimeMinutes}
-            minTempF={curveData.minTempF}
-            maxTempF={curveData.maxTempF}
-            compact
-          />
-        </div>
-      )}
-
-      {/* Set points list */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 pb-32">
-        {points.length === 0
-          ? (
-              <div className="space-y-3 py-4">
-                <p className="text-center text-xs text-zinc-500">
-                  Start from a preset or add set points manually
-                </p>
-                <div className="grid grid-cols-4 gap-2">
-                  {PRESETS.map((preset) => {
-                    const Icon = preset.icon
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => handleApplyPreset(preset)}
-                        className="flex flex-col items-center gap-1 rounded-xl border border-zinc-800 bg-zinc-900 px-2 py-3 text-zinc-400 active:scale-[0.97]"
-                      >
-                        <Icon size={16} />
-                        <span className="text-[11px] font-semibold">{preset.label}</span>
-                      </button>
-                    )
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => setAIWizardOpen(true)}
-                    className="flex flex-col items-center gap-1 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-2 py-3 text-cyan-400 active:scale-[0.97]"
-                  >
-                    <Sparkles size={16} />
-                    <span className="text-[11px] font-semibold">Custom AI</span>
-                  </button>
-                </div>
-              </div>
-            )
-          : (
-              <div className="space-y-1.5">
-                {orderedPhases.map(phase => (
-                  <SetPointCard
-                    key={phase.id}
-                    phase={phase}
-                    onAdjustTemp={handleAdjustTemp}
-                    onDelete={handleDeletePoint}
-                    onTapCard={handleEditPoint}
-                    disabled={isMutating}
-                    autoLabel={
-                      phase.id === autoOnId
-                        ? 'on'
-                        : phase.id === autoOffId
-                          ? 'off'
-                          : null
-                    }
-                  />
-                ))}
-              </div>
-            )}
-
-        {saveError && (
-          <p className="mt-3 text-center text-xs text-red-400">{saveError}</p>
+    <>
+      <Sheet
+        open={open}
+        onClose={onClose}
+        title={isEdit ? 'Edit Curve' : 'New Curve'}
+        trailing={(
+          <SheetAction
+            onClick={() => void performSave()}
+            disabled={isMutating || days.size === 0 || points.length === 0}
+          >
+            {isMutating ? 'Saving…' : 'Save'}
+          </SheetAction>
         )}
-      </div>
+      >
+        <div className="space-y-6">
+          <ListSection header="Days">
+            <DayPicker value={days} onToggle={toggleDay} />
+          </ListSection>
 
-      {/* Floating add button */}
-      <div className="pb-safe absolute inset-x-0 bottom-0 border-t border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur-sm">
-        <button
-          onClick={handleAddPoint}
-          className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-700 text-sm font-medium text-zinc-300 active:bg-zinc-800"
-        >
-          <Plus size={14} />
-          Add Set Point
-        </button>
-      </div>
+          <ListSection
+            header="Sleep window"
+            footer="The Pod turns on at the first set point and off at the last. Changing these shifts the curve to fit."
+          >
+            <TimeInput label="Bedtime" value={bedtime} onChange={handleBedtimeChange} />
+            <TimeInput label="Wake up" value={wakeTime} onChange={handleWakeTimeChange} />
+          </ListSection>
+
+          <ListSection header="Temperature range" footer="Used when you start from a preset.">
+            <TempStepper
+              label="Coolest"
+              value={minTemp}
+              onChange={v => setMinTemp(Math.min(v, maxTemp - 2))}
+              unit={unit}
+            />
+            <TempStepper
+              label="Warmest"
+              value={maxTemp}
+              onChange={v => setMaxTemp(Math.max(v, minTemp + 2))}
+              unit={unit}
+            />
+          </ListSection>
+
+          {points.length === 0
+            ? (
+                <ListSection header="Start from a preset" footer="Or add set points one at a time.">
+                  {PRESETS.map(preset => (
+                    <ListRow
+                      key={preset.id}
+                      icon={preset.icon}
+                      title={preset.label}
+                      subtitle={preset.description}
+                      onClick={() => handleApplyPreset(preset)}
+                    />
+                  ))}
+                  <ListRow
+                    icon={Sparkles}
+                    title="Custom AI curve"
+                    subtitle="Describe how you sleep, get a curve"
+                    onClick={() => setAIWizardOpen(true)}
+                    accessory={<ChevronRight size={18} className="shrink-0 text-zinc-600" />}
+                  />
+                  <AddRow onClick={handleAddPoint}>Add Set Point</AddRow>
+                </ListSection>
+              )
+            : (
+                <>
+                  {curveData && (
+                    <section className="rounded-xl bg-zinc-900 pb-2 pl-1 pr-2 pt-3">
+                      <CurveChart
+                        points={curveData.points}
+                        bedtimeMinutes={curveData.bedtimeMinutes}
+                        minTempF={curveData.minTempF}
+                        maxTempF={curveData.maxTempF}
+                        compact
+                      />
+                    </section>
+                  )}
+                  <ListSection header="Set points" footer="Tap a time to change it or delete the set point.">
+                    {orderedPhases.map(phase => (
+                      <SetPointCard
+                        key={phase.id}
+                        phase={phase}
+                        onAdjustTemp={handleAdjustTemp}
+                        onDelete={handleDeletePoint}
+                        onTapCard={handleEditPoint}
+                        disabled={isMutating}
+                        autoLabel={
+                          phase.id === autoOnId
+                            ? 'on'
+                            : phase.id === autoOffId
+                              ? 'off'
+                              : null
+                        }
+                      />
+                    ))}
+                    <AddRow onClick={handleAddPoint} disabled={isMutating}>Add Set Point</AddRow>
+                  </ListSection>
+                </>
+              )}
+
+          {saveError && (
+            <p className="px-4 text-[13px] text-red-400">{saveError}</p>
+          )}
+
+          {isEdit && onDelete && (
+            <ListSection>
+              <DestructiveRow onClick={onDelete} disabled={isMutating}>Delete Curve</DestructiveRow>
+            </ListSection>
+          )}
+        </div>
+      </Sheet>
 
       {/* Custom AI curve wizard */}
       <AICurveWizard
-        open={aiWizardOpen}
+        open={open && aiWizardOpen}
         onClose={() => setAIWizardOpen(false)}
         onApply={handleApplyAICurve}
       />
@@ -523,7 +449,7 @@ export function CurveEditor({
       {/* Per-point editor sheet */}
       <SetPointEditor
         editingPhase={editingPhase}
-        open={editorOpen}
+        open={open && editorOpen}
         onClose={() => {
           setEditorOpen(false)
           setEditingId(null)
@@ -534,41 +460,18 @@ export function CurveEditor({
       />
 
       {/* Conflict confirm dialog */}
-      {pendingConflict && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-5">
-            <h3 className="text-sm font-semibold text-white">Move days from another curve?</h3>
-            <p className="mt-2 text-xs text-zinc-400">
-              {pendingConflict.map(d => DAYS.find(x => x.key === d)?.label).join(', ')}
-              {' '}
-              {pendingConflict.length === 1 ? 'is' : 'are'}
-              {' '}
-              already part of another curve. Saving will move
-              {' '}
-              {pendingConflict.length === 1 ? 'it' : 'them'}
-              {' '}
-              to this curve.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={() => setPendingConflict(null)}
-                className="flex-1 rounded-xl border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-300 active:bg-zinc-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void performSave(true)}
-                disabled={isMutating}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-sky-500 px-3 py-2 text-xs font-semibold text-white active:bg-sky-600 disabled:opacity-60"
-              >
-                {isMutating && <Loader2 size={12} className="animate-spin" />}
-                {isMutating ? 'Saving…' : 'Move & Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      <ConfirmDialog
+        open={open && pendingConflict !== null}
+        title="Move days from another curve?"
+        message={pendingConflict
+          ? `${pendingConflict.map(d => DAYS.find(x => x.key === d)?.label).join(', ')} ${pendingConflict.length === 1 ? 'is' : 'are'} already part of another curve. Saving will move ${pendingConflict.length === 1 ? 'it' : 'them'} to this curve.`
+          : ''}
+        confirmLabel={isMutating ? 'Saving…' : 'Move'}
+        busy={isMutating}
+        onConfirm={() => void performSave(true)}
+        onCancel={() => setPendingConflict(null)}
+      />
+    </>
   )
 }
 
@@ -577,11 +480,9 @@ interface TempStepperProps {
   value: number
   onChange: (value: number) => void
   unit: TempUnit
-  icon?: React.ReactNode
-  accentClass?: string
 }
 
-function TempStepper({ label, value, onChange, unit, icon, accentClass }: TempStepperProps) {
+function TempStepper({ label, value, onChange, unit }: TempStepperProps) {
   const displayValue = Math.round(setpointFToDisplay(value, unit) ?? value)
   const minDisplay = Math.round(setpointFToDisplay(TEMP_FLOOR, unit) ?? TEMP_FLOOR)
   const maxDisplay = Math.round(setpointFToDisplay(TEMP_CEIL, unit) ?? TEMP_CEIL)
@@ -592,34 +493,13 @@ function TempStepper({ label, value, onChange, unit, icon, accentClass }: TempSt
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-400">
-        {icon && <span className={accentClass}>{icon}</span>}
-        {label}
-      </label>
-      <div className="flex h-11 items-center rounded-lg border border-zinc-700 bg-zinc-800/50">
-        <button
-          type="button"
-          onClick={() => applyDisplayDelta(-1)}
-          disabled={value <= TEMP_FLOOR}
-          className="flex h-full w-10 items-center justify-center text-zinc-400 transition-colors active:text-white disabled:opacity-30"
-          aria-label={`Decrease ${label}`}
-        >
-          <Minus size={14} strokeWidth={3} />
-        </button>
-        <span className="flex-1 text-center text-sm font-semibold tabular-nums text-white">
-          {formatSetpointF(value, unit)}
-        </span>
-        <button
-          type="button"
-          onClick={() => applyDisplayDelta(1)}
-          disabled={value >= TEMP_CEIL}
-          className="flex h-full w-10 items-center justify-center text-zinc-400 transition-colors active:text-white disabled:opacity-30"
-          aria-label={`Increase ${label}`}
-        >
-          <Plus size={14} strokeWidth={3} />
-        </button>
-      </div>
-    </div>
+    <StepperRow
+      label={label}
+      value={<span style={{ color: tempTint(value) }}>{formatSetpointF(value, unit)}</span>}
+      onDecrement={() => applyDisplayDelta(-1)}
+      onIncrement={() => applyDisplayDelta(1)}
+      decrementDisabled={value <= TEMP_FLOOR}
+      incrementDisabled={value >= TEMP_CEIL}
+    />
   )
 }

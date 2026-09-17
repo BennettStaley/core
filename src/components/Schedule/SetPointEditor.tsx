@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { X, Minus, Plus, Trash2 } from 'lucide-react'
-import clsx from 'clsx'
+import { Minus, Plus } from 'lucide-react'
 import { TimeInput } from './TimeInput'
 import type { SchedulePhase } from '@/src/hooks/useSchedules'
 import { useTemperatureUnit } from '@/src/hooks/useTemperatureUnit'
 import { displayToSetpointF, setpointFToDisplay } from '@/src/lib/tempUtils'
+import { ListRow, ListSection, Sheet, Switch } from '@/src/ui/ios'
+import { DestructiveRow, SheetAction } from './EditorRows'
+import { tempTint } from './scheduleFormat'
 
 interface SetPointEditorProps {
   /** Phase to edit, or null for create mode */
@@ -29,9 +31,9 @@ const DEFAULT_TEMP = 78
 const DEFAULT_TIME = '22:00'
 
 /**
- * Bottom sheet editor for creating or editing a temperature set point.
- * Shows time picker, temperature slider with +/- buttons, enable toggle,
- * and save/delete actions.
+ * Sheet for creating or editing a temperature set point: a large tinted
+ * temperature with ± buttons and a slider, then time / enabled rows and a
+ * destructive Delete row (tap twice to confirm).
  */
 export function SetPointEditor({
   editingPhase,
@@ -100,161 +102,83 @@ export function SetPointEditor({
 
   const temperatureF = Math.round(displayToSetpointF(displayTemperature, unit) ?? DEFAULT_TEMP)
 
-  // Temperature color
-  const tempColor
-    = temperatureF <= 74
-      ? 'text-sky-400'
-      : temperatureF <= 80
-        ? 'text-zinc-300'
-        : 'text-amber-400'
-
-  if (!open) return null
-
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-40 bg-black/60"
-        onClick={onClose}
-      />
-
-      {/* Bottom sheet */}
-      <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-2xl bg-zinc-900 px-4 pb-6 pt-3 shadow-xl sm:px-5 sm:pb-8 sm:pt-4">
-        {/* Handle + close */}
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-white">
-            {isEditing ? `Edit ${editingPhase?.name ?? 'Set Point'}` : 'Add Set Point'}
-          </h3>
-          <button
-            onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 active:bg-zinc-700"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Time input */}
-        <div className="mb-5">
-          <TimeInput
-            label="Time"
-            value={time}
-            onChange={setTime}
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={isEditing ? 'Edit Set Point' : 'Add Set Point'}
+      trailing={<SheetAction onClick={handleSave}>{isEditing ? 'Done' : 'Add'}</SheetAction>}
+    >
+      <div className="space-y-6">
+        <div className="rounded-xl bg-zinc-900 px-4 pb-2 pt-5">
+          <div className="flex items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={() => adjustTemp(-2)}
+              disabled={displayTemperature <= minDisplayTemp}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-white active:bg-zinc-700 disabled:text-zinc-600"
+              aria-label="Decrease temperature"
+            >
+              <Minus size={20} />
+            </button>
+            <div className="text-center">
+              <div className="ios-numeric text-[56px] font-light leading-none" style={{ color: tempTint(temperatureF) }}>
+                {displayTemperature}
+                °
+                <span className="text-[34px]">{unit}</span>
+              </div>
+              <div className="ios-numeric mt-1.5 text-[13px] text-zinc-500">
+                {minDisplayTemp}
+                °–
+                {maxDisplayTemp}
+                °
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => adjustTemp(2)}
+              disabled={displayTemperature >= maxDisplayTemp}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-white active:bg-zinc-700 disabled:text-zinc-600"
+              aria-label="Increase temperature"
+            >
+              <Plus size={20} />
+            </button>
+          </div>
+          <input
+            type="range"
+            min={minDisplayTemp}
+            max={maxDisplayTemp}
+            step={1}
+            value={displayTemperature}
+            onChange={e => setDisplayTemperature(Number(e.target.value))}
+            className="m-0 mt-4 block h-7 w-full accent-sky-500"
+            aria-label="Temperature slider"
           />
         </div>
 
-        {/* Temperature control */}
-        <div className="mb-5">
-          <label className="mb-2 block text-xs font-medium text-zinc-400">
-            Temperature
-          </label>
-          <div className="flex items-center justify-center gap-4">
-            <button
-              onClick={() => adjustTemp(-2)}
-              disabled={displayTemperature <= minDisplayTemp}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 transition-colors active:bg-zinc-700 disabled:opacity-30"
-              aria-label="Decrease temperature"
-            >
-              <Minus size={18} />
-            </button>
-
-            <div className="flex flex-col items-center">
-              <span className={clsx('text-4xl font-bold tabular-nums', tempColor)}>
-                {displayTemperature}
-                °
-                {unit}
-              </span>
-              <span className="mt-1 text-[10px] text-zinc-600">
-                {minDisplayTemp}
-                ° –
-                {maxDisplayTemp}
-                °
-              </span>
-            </div>
-
-            <button
-              onClick={() => adjustTemp(2)}
-              disabled={displayTemperature >= maxDisplayTemp}
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-zinc-800 text-zinc-300 transition-colors active:bg-zinc-700 disabled:opacity-30"
-              aria-label="Increase temperature"
-            >
-              <Plus size={18} />
-            </button>
-          </div>
-
-          {/* Temperature slider for quick adjustment */}
-          <div className="mt-3 px-2">
-            <input
-              type="range"
-              min={minDisplayTemp}
-              max={maxDisplayTemp}
-              step={1}
-              value={displayTemperature}
-              onChange={e => setDisplayTemperature(Number(e.target.value))}
-              className="w-full accent-sky-500"
-              aria-label="Temperature slider"
-            />
-          </div>
-        </div>
-
-        {/* Enable toggle (edit mode only) */}
-        {isEditing && (
-          <div className="mb-5 flex items-center justify-between rounded-xl bg-zinc-800/50 px-4 py-3">
-            <span className="text-sm text-zinc-300">Enabled</span>
-            <button
-              onClick={() => setEnabled(!enabled)}
-              className="flex min-h-[44px] min-w-[48px] items-center justify-center"
-              role="switch"
-              aria-checked={enabled}
-            >
-              <span className={clsx(
-                'relative h-7 w-12 rounded-full transition-colors',
-                enabled ? 'bg-sky-500' : 'bg-zinc-700'
-              )}
-              >
-                <span
-                  className={clsx(
-                    'absolute top-0.5 h-6 w-6 rounded-full bg-white transition-transform',
-                    enabled ? 'translate-x-5' : 'translate-x-0.5'
-                  )}
-                />
-              </span>
-            </button>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-3">
+        <ListSection>
+          <TimeInput label="Time" value={time} onChange={setTime} />
           {isEditing && (
-            <button
-              onClick={() => {
-                if (showDeleteConfirm) {
-                  handleDelete()
-                }
-                else {
-                  setShowDeleteConfirm(true)
-                }
-              }}
-              className={clsx(
-                'flex h-12 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition-colors',
-                showDeleteConfirm
-                  ? 'bg-red-500/20 text-red-400'
-                  : 'bg-zinc-800 text-zinc-400 active:bg-zinc-700'
-              )}
-            >
-              <Trash2 size={16} />
-              {showDeleteConfirm ? 'Confirm Delete' : 'Delete'}
-            </button>
+            <ListRow
+              title="Enabled"
+              accessory={<Switch checked={enabled} onChange={setEnabled} aria-label="Enabled" />}
+            />
           )}
+        </ListSection>
 
-          <button
-            onClick={handleSave}
-            className="flex h-12 flex-1 items-center justify-center rounded-xl bg-sky-500 text-sm font-semibold text-white transition-colors active:bg-sky-600"
-          >
-            {isEditing ? 'Save Changes' : 'Add Set Point'}
-          </button>
-        </div>
+        {isEditing && (
+          <ListSection footer={showDeleteConfirm ? 'Tap again to remove this set point.' : undefined}>
+            <DestructiveRow
+              onClick={() => {
+                if (showDeleteConfirm) handleDelete()
+                else setShowDeleteConfirm(true)
+              }}
+            >
+              {showDeleteConfirm ? 'Confirm Delete' : 'Delete Set Point'}
+            </DestructiveRow>
+          </ListSection>
+        )}
       </div>
-    </>
+    </Sheet>
   )
 }

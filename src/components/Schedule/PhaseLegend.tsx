@@ -14,7 +14,7 @@ export function PhaseLegend() {
             className="inline-block h-2 w-2 rounded-full"
             style={{ backgroundColor: phaseColors[phase] }}
           />
-          <span className="text-[10px] font-medium text-zinc-500">{phaseLabels[phase]}</span>
+          <span className="text-[11px] text-zinc-500">{phaseLabels[phase]}</span>
         </div>
       ))}
     </div>

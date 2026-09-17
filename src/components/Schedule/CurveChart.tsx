@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useCallback } from 'react'
+import { useCallback, useId, useMemo } from 'react'
 import {
   AreaChart,
   Area,
@@ -8,17 +8,18 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ReferenceLine,
   ResponsiveContainer,
 } from 'recharts'
 import type { CurvePoint } from '@/src/lib/sleepCurve/types'
-import { colorForTempOffset } from '@/src/lib/sleepCurve/tempColor'
 import { phaseLabels } from '@/src/lib/sleepCurve/types'
 import { curvePointToDisplayTime } from '@/src/lib/sleepCurve/generate'
 import { useTemperatureUnit } from '@/src/hooks/useTemperatureUnit'
 import { formatSetpointF, type TempUnit } from '@/src/lib/tempUtils'
+import { tempTint } from './scheduleFormat'
 
 const BASE_TEMP_F = 80
+const GRID = '#2C2C2E'
+const AXIS_LABEL = '#8E8E93'
 
 interface CurveChartProps {
   points: CurvePoint[]
@@ -29,7 +30,7 @@ interface CurveChartProps {
   selectedIndex?: number | null
   /** Called when user taps a dot on the chart */
   onSelectIndex?: (index: number) => void
-  /** Compact mode for drawer (shorter height, no phase legend space) */
+  /** Compact mode for sheets (shorter height) */
   compact?: boolean
 }
 
@@ -42,33 +43,26 @@ interface ChartDataPoint {
   index: number
 }
 
-/** Custom tooltip for the temperature curve chart */
+/** Tooltip in the iOS "callout" style: raised grey capsule, no border. */
 function CurveTooltip({ active, payload, unit }: { active?: boolean, payload?: Array<{ payload: ChartDataPoint }>, unit: TempUnit }) {
   if (!active || !payload?.[0]) return null
   const data = payload[0].payload
   return (
-    <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs shadow-lg">
-      <div className="font-medium text-white">{data.displayTime}</div>
-      <div className="mt-1 flex items-center gap-2">
-        <span
-          className="inline-block h-2 w-2 rounded-full"
-          style={{ backgroundColor: colorForTempOffset(data.tempOffset) }}
-        />
-        <span className="text-zinc-300">
-          {formatSetpointF(data.tempF, unit)}
-        </span>
-        <span className="text-zinc-500">·</span>
-        <span className="text-zinc-400">{data.phase}</span>
+    <div className="rounded-lg bg-zinc-800 px-2.5 py-1.5 text-[13px] leading-[18px]">
+      <div className="ios-numeric text-white">
+        {data.displayTime}
+        {' · '}
+        <span style={{ color: tempTint(data.tempF) }}>{formatSetpointF(data.tempF, unit)}</span>
       </div>
+      <div className="text-zinc-500">{data.phase}</div>
     </div>
   )
 }
 
-/** Custom dot renderer that highlights selected point */
 interface InteractiveDotProps {
   cx?: number
   cy?: number
-  payload?: { index: number, tempOffset: number }
+  payload?: { index: number, tempF: number }
   selectedIndex?: number | null
   onSelectIndex?: (index: number) => void
 }
@@ -77,16 +71,16 @@ function InteractiveDot({ cx, cy, payload, selectedIndex, onSelectIndex }: Inter
   if (cx == null || cy == null || !payload) return null
 
   const isSelected = payload.index === selectedIndex
-  const color = colorForTempOffset(payload.tempOffset)
+  const color = tempTint(payload.tempF)
 
   return (
     <circle
       cx={cx}
       cy={cy}
-      r={isSelected ? 6 : 3.5}
+      r={isSelected ? 5 : 3}
       fill={isSelected ? '#fff' : color}
       stroke={isSelected ? color : 'none'}
-      strokeWidth={isSelected ? 2.5 : 0}
+      strokeWidth={isSelected ? 2 : 0}
       style={{ cursor: onSelectIndex ? 'pointer' : undefined }}
       onClick={(e) => {
         e.stopPropagation()
@@ -96,6 +90,10 @@ function InteractiveDot({ cx, cy, payload, selectedIndex, onSelectIndex }: Inter
   )
 }
 
+/**
+ * Temperature curve: a thin line tinted cool → warm along its length over a
+ * faint (12%) fill, hairline grid and 11pt axis labels.
+ */
 export function CurveChart({
   points,
   bedtimeMinutes,
@@ -107,6 +105,7 @@ export function CurveChart({
 }: CurveChartProps) {
   const { unit } = useTemperatureUnit()
   const showDots = onSelectIndex != null
+  const gradientId = `curve-${useId().replace(/:/g, '')}`
 
   const chartData = useMemo<ChartDataPoint[]>(() => {
     return points.map((p, i) => ({
@@ -119,17 +118,14 @@ export function CurveChart({
     }))
   }, [points, bedtimeMinutes])
 
-  // Y-axis domain: pad 4°F around the min/max
-  const yMin = Math.min(minTempF, ...chartData.map(d => d.tempF)) - 4
-  const yMax = Math.max(maxTempF, ...chartData.map(d => d.tempF)) + 4
+  // Y-axis domain: pad 3°F around the min/max
+  const yMin = Math.floor(Math.min(minTempF, ...chartData.map(d => d.tempF)) - 3)
+  const yMax = Math.ceil(Math.max(maxTempF, ...chartData.map(d => d.tempF)) + 3)
 
-  // X-axis tick formatter: show actual time
   const formatXTick = (minutesFromBedtime: number) => {
     return curvePointToDisplayTime(minutesFromBedtime, bedtimeMinutes)
   }
 
-  // Generate gradient stops based on curve data
-  const gradientId = 'tempCurveGradient'
   const gradientStops = useMemo(() => {
     if (chartData.length < 2) return []
     const minX = chartData[0].minutesFromBedtime
@@ -137,22 +133,23 @@ export function CurveChart({
     const range = maxX - minX || 1
     return chartData.map(d => ({
       offset: `${((d.minutesFromBedtime - minX) / range) * 100}%`,
-      color: colorForTempOffset(d.tempOffset),
+      color: tempTint(d.tempF),
     }))
   }, [chartData])
 
-  // X-axis ticks: every 2 hours from first to last point
+  // X-axis ticks: every 2 hours (3 in compact mode) from first to last point
   const xTicks = useMemo(() => {
     if (chartData.length < 2) return []
+    const step = compact ? 180 : 120
     const first = chartData[0].minutesFromBedtime
     const last = chartData[chartData.length - 1].minutesFromBedtime
     const ticks: number[] = []
-    const start = Math.ceil(first / 120) * 120
-    for (let t = start; t <= last; t += 120) {
+    const start = Math.ceil(first / step) * step
+    for (let t = start; t <= last; t += step) {
       ticks.push(t)
     }
     return ticks
-  }, [chartData])
+  }, [chartData, compact])
 
   const renderDot = useCallback((props: InteractiveDotProps) => (
     <InteractiveDot
@@ -163,85 +160,58 @@ export function CurveChart({
   ), [selectedIndex, onSelectIndex])
 
   return (
-    <div className="w-full" style={{ height: compact ? 180 : 220 }}>
+    <div className="w-full" style={{ height: compact ? 160 : 200 }}>
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
         <AreaChart
           data={chartData}
-          margin={{ top: 8, right: 32, bottom: 0, left: -8 }}
+          margin={{ top: 8, right: 12, bottom: 0, left: -16 }}
         >
           <defs>
-            <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
+            <linearGradient id={`${gradientId}-fill`} x1="0" y1="0" x2="1" y2="0">
               {gradientStops.map((stop, i) => (
-                <stop key={i} offset={stop.offset} stopColor={stop.color} stopOpacity={0.6} />
+                <stop key={i} offset={stop.offset} stopColor={stop.color} stopOpacity={0.12} />
               ))}
             </linearGradient>
-            <linearGradient id={`${gradientId}Line`} x1="0" y1="0" x2="1" y2="0">
+            <linearGradient id={`${gradientId}-line`} x1="0" y1="0" x2="1" y2="0">
               {gradientStops.map((stop, i) => (
                 <stop key={i} offset={stop.offset} stopColor={stop.color} stopOpacity={1} />
               ))}
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+          <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis
             dataKey="minutesFromBedtime"
             type="number"
             domain={['dataMin', 'dataMax']}
             ticks={xTicks}
             tickFormatter={formatXTick}
-            tick={{ fill: '#71717a', fontSize: 10 }}
-            axisLine={{ stroke: '#3f3f46' }}
+            tick={{ fill: AXIS_LABEL, fontSize: 11 }}
+            axisLine={false}
             tickLine={false}
+            tickMargin={6}
           />
           <YAxis
             domain={[yMin, yMax]}
-            tick={{ fill: '#71717a', fontSize: 10 }}
+            tick={{ fill: AXIS_LABEL, fontSize: 11 }}
             axisLine={false}
             tickLine={false}
+            tickCount={4}
+            allowDecimals={false}
             tickFormatter={(v: number) => formatSetpointF(v, unit, { includeUnit: false })}
           />
           <Tooltip
             content={<CurveTooltip unit={unit} />}
-            cursor={{ stroke: '#52525b', strokeDasharray: '3 3' }}
-          />
-          {/* Base temperature reference line */}
-          <ReferenceLine
-            y={BASE_TEMP_F}
-            stroke="#52525b"
-            strokeDasharray="4 4"
-            label={{ value: formatSetpointF(BASE_TEMP_F, unit), position: 'right', fill: '#71717a', fontSize: 9 }}
-          />
-          {/* Min temp reference */}
-          <ReferenceLine
-            y={minTempF}
-            stroke="#3b82f6"
-            strokeDasharray="2 2"
-            strokeOpacity={0.4}
-            label={{ value: formatSetpointF(minTempF, unit, { includeUnit: false }), position: 'left', fill: '#3b82f6', fontSize: 9 }}
-          />
-          {/* Max temp reference */}
-          <ReferenceLine
-            y={maxTempF}
-            stroke="#f97316"
-            strokeDasharray="2 2"
-            strokeOpacity={0.4}
-            label={{ value: formatSetpointF(maxTempF, unit, { includeUnit: false }), position: 'left', fill: '#f97316', fontSize: 9 }}
-          />
-          {/* Bedtime marker */}
-          <ReferenceLine
-            x={0}
-            stroke="#a855f7"
-            strokeDasharray="4 4"
-            strokeOpacity={0.6}
+            cursor={{ stroke: '#48484A', strokeWidth: 1 }}
           />
           <Area
             type="monotone"
             dataKey="tempF"
-            stroke={`url(#${gradientId}Line)`}
-            strokeWidth={2.5}
-            fill={`url(#${gradientId})`}
-            fillOpacity={0.15}
+            stroke={`url(#${gradientId}-line)`}
+            strokeWidth={2}
+            fill={`url(#${gradientId}-fill)`}
+            fillOpacity={1}
             dot={showDots ? renderDot : false}
-            activeDot={showDots ? false : { r: 4, fill: '#fff', strokeWidth: 2, stroke: '#3b82f6' }}
+            activeDot={showDots ? false : { r: 4, fill: '#fff', strokeWidth: 0 }}
             isAnimationActive={false}
           />
         </AreaChart>

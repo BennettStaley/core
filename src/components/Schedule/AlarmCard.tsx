@@ -1,11 +1,12 @@
 'use client'
 
-import { Bell, Pencil, Play, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import type { DayOfWeek } from './DaySelector'
 import { formatTime12h } from './TimeInput'
 import { useTemperatureUnit } from '@/src/hooks/useTemperatureUnit'
 import { formatSetpointF } from '@/src/lib/tempUtils'
+import { Switch } from '@/src/ui/ios'
+import { formatDays, splitTime12h } from './scheduleFormat'
 
 export interface AlarmGroup {
   /** All underlying alarm_schedules row ids in this group */
@@ -21,102 +22,49 @@ export interface AlarmGroup {
 
 interface AlarmCardProps {
   group: AlarmGroup
+  /** Opens the alarm editor (which hosts Test and Delete). */
   onEdit: () => void
-  onDelete: () => void
-  onTest: () => void
-  isTesting?: boolean
+  /** Flip enabled for every row in the group. */
+  onToggle: (enabled: boolean) => void
+  /** Disables the switch while a toggle is in flight. */
+  isToggling?: boolean
 }
 
-const DAY_SHORT: Record<DayOfWeek, string> = {
-  sunday: 'Sun', monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed',
-  thursday: 'Thu', friday: 'Fri', saturday: 'Sat',
-}
-
-const DAY_ORDER: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-const WEEKDAYS: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
-const WEEKENDS: DayOfWeek[] = ['saturday', 'sunday']
-
-function formatDayRange(days: DayOfWeek[]): string {
-  if (days.length === 0) return ''
-  if (days.length === 7) return 'Every day'
-  const set = new Set(days)
-  if (WEEKDAYS.every(d => set.has(d)) && set.size === 5) return 'Weekdays'
-  if (WEEKENDS.every(d => set.has(d)) && set.size === 2) return 'Weekends'
-
-  const ordered = DAY_ORDER.filter(d => set.has(d))
-  const indices = ordered.map(d => DAY_ORDER.indexOf(d))
-  const isContiguous = indices.every((idx, i) => i === 0 || idx === indices[i - 1] + 1)
-  if (isContiguous && ordered.length > 2) {
-    return `${DAY_SHORT[ordered[0]]}–${DAY_SHORT[ordered[ordered.length - 1]]}`
-  }
-  return ordered.map(d => DAY_SHORT[d]).join(', ')
-}
-
-export function AlarmCard({ group, onEdit, onDelete, onTest, isTesting = false }: AlarmCardProps) {
+/**
+ * Clock.app-style alarm row: large light tabular time, a repeat/vibration
+ * summary underneath and an on/off switch. Tap the text to edit.
+ */
+export function AlarmCard({ group, onEdit, onToggle, isToggling = false }: AlarmCardProps) {
   const { unit } = useTemperatureUnit()
-  const label = formatDayRange(group.days)
+  const label = formatDays(group.days)
+  const [digits, period] = splitTime12h(formatTime12h(group.time))
 
   return (
-    <div
-      className={clsx(
-        'rounded-2xl border p-3 sm:p-4',
-        group.enabled
-          ? 'border-zinc-800 bg-zinc-900'
-          : 'border-dashed border-amber-500/30 bg-zinc-900/50',
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <Bell size={18} className="mt-1 shrink-0 text-amber-400" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-semibold text-white">
-              {formatTime12h(group.time)}
-            </span>
-            {!group.enabled && (
-              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-medium uppercase text-amber-500">
-                Paused
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 text-[11px] text-zinc-400">{label}</p>
-
-          <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
-            <span>
-              {group.duration}
-              s buzz
-            </span>
-            <span>·</span>
-            <span>
-              {formatSetpointF(group.alarmTemperature, unit)}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            onClick={onTest}
-            disabled={isTesting}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-amber-400 transition-colors active:bg-zinc-800 disabled:opacity-50"
-            aria-label={`Test ${label} alarm`}
-          >
-            <Play size={14} />
-          </button>
-          <button
-            onClick={onEdit}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition-colors active:bg-zinc-800 active:text-sky-400"
-            aria-label={`Edit ${label} alarm`}
-          >
-            <Pencil size={14} />
-          </button>
-          <button
-            onClick={onDelete}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-600 transition-colors active:bg-zinc-800 active:text-red-400"
-            aria-label={`Delete ${label} alarm`}
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      </div>
+    <div className="flex min-h-[88px] items-center gap-3 pr-4">
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`Edit ${formatTime12h(group.time)} ${label} alarm`}
+        className="flex min-w-0 flex-1 flex-col items-start self-stretch justify-center py-2 pl-4 text-left active:opacity-60"
+      >
+        <span className={clsx('ios-numeric text-[34px] font-light leading-[41px]', group.enabled ? 'text-white' : 'text-zinc-500')}>
+          {digits}
+          <span className="ml-1 text-[22px]">{period}</span>
+        </span>
+        <span className="block max-w-full truncate text-[15px] leading-5 text-zinc-500">
+          {label}
+          {' · '}
+          {group.duration}
+          {' s vibration · '}
+          {formatSetpointF(group.alarmTemperature, unit)}
+        </span>
+      </button>
+      <Switch
+        checked={group.enabled}
+        onChange={onToggle}
+        disabled={isToggling}
+        aria-label={`${formatTime12h(group.time)} alarm`}
+      />
     </div>
   )
 }

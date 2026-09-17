@@ -1,5 +1,7 @@
 'use client'
 
+import clsx from 'clsx'
+
 interface ConfirmDialogProps {
   open: boolean
   title: string
@@ -7,13 +9,16 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   cancelLabel?: string
   variant?: 'default' | 'danger'
+  /** Disables the confirm button while the action is in flight. */
+  busy?: boolean
   onConfirm: () => void
   onCancel: () => void
 }
 
 /**
- * Lightweight confirmation modal. Used for destructive actions like
- * deleting a curve.
+ * iOS alert (UIAlertController .alert): centered 270pt card, bold title,
+ * footnote message and a hairline-separated button row. Used for destructive
+ * actions like deleting a curve.
  */
 export function ConfirmDialog({
   open,
@@ -22,30 +27,35 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   variant = 'default',
+  busy = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
   if (!open) return null
 
-  const confirmClass = variant === 'danger'
-    ? 'bg-red-500 active:bg-red-600'
-    : 'bg-sky-500 active:bg-sky-600'
-
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-5">
-        <h3 className="text-sm font-semibold text-white">{title}</h3>
-        <p className="mt-2 text-xs text-zinc-400">{message}</p>
-        <div className="mt-4 flex gap-2">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4 animate-in fade-in duration-150" role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title">
+      <div className="w-[270px] overflow-hidden rounded-[14px] bg-zinc-800">
+        <div className="px-4 pb-4 pt-5 text-center">
+          <h3 id="confirm-dialog-title" className="text-[17px] font-semibold leading-[22px] text-white">{title}</h3>
+          <p className="mt-1 text-[13px] leading-[18px] text-zinc-300">{message}</p>
+        </div>
+        <div className="grid grid-cols-2 border-t border-zinc-700">
           <button
+            type="button"
             onClick={onCancel}
-            className="flex-1 rounded-xl border border-zinc-700 px-3 py-2 text-xs font-medium text-zinc-300 active:bg-zinc-800"
+            className="min-h-[44px] border-r border-zinc-700 text-[17px] text-sky-400 active:bg-zinc-700"
           >
             {cancelLabel}
           </button>
           <button
+            type="button"
             onClick={onConfirm}
-            className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold text-white ${confirmClass}`}
+            disabled={busy}
+            className={clsx(
+              'min-h-[44px] text-[17px] font-semibold active:bg-zinc-700 disabled:opacity-40',
+              variant === 'danger' ? 'text-red-400' : 'text-sky-400',
+            )}
           >
             {confirmLabel}
           </button>

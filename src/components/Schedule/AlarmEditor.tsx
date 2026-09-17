@@ -1,11 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { X, Vibrate, Bell, Loader2, Trash2 } from 'lucide-react'
-import clsx from 'clsx'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Loader2, Square, Vibrate } from 'lucide-react'
+import { ListRow, ListSection, SegmentedControl, Sheet } from '@/src/ui/ios'
 import { trpc } from '@/src/utils/trpc'
 import { FIXED_INTENSITY, FIXED_PATTERN, VIBRATION_PRESETS } from '@/src/lib/vibrationPatterns'
-import { DAYS, type DayOfWeek } from './DaySelector'
+import { DayPicker, type DayOfWeek } from './DaySelector'
+import { DestructiveRow, SheetAction } from './EditorRows'
+import { formatDays, tempTint } from './scheduleFormat'
 import { TimeInput } from './TimeInput'
 import type { AlarmGroup } from './AlarmCard'
 import { useTemperatureUnit } from '@/src/hooks/useTemperatureUnit'
@@ -31,7 +33,7 @@ const MIN_TEMP = 55
 const MAX_TEMP = 110
 
 /**
- * Full-screen editor for creating or editing an alarm.
+ * Sheet for creating or editing an alarm.
  * - Each saved alarm produces one row per selected day (same time/pattern/intensity/duration/temp).
  * - "Test" fires `device.setAlarm` immediately so the user can feel the pattern.
  * - On save, delete-then-create: removes existing rows for this group then writes new ones.
@@ -74,16 +76,6 @@ export function AlarmEditor({
     setSaveError(null)
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, existingGroup, unit, defaultDisplayTemp])
-
-  // Lock body scroll
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
 
   const batchUpdate = trpc.schedules.batchUpdate.useMutation()
   const testAlarm = trpc.device.setAlarm.useMutation()
@@ -167,206 +159,138 @@ export function AlarmEditor({
     }
   }, [existingGroup, batchUpdate, utils, onSaved, onClose])
 
-  if (!open) return null
+  const presetValue = VIBRATION_PRESETS.find(p => p.duration === duration)?.name ?? ''
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <button
-          onClick={onClose}
-          disabled={isMutating}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 active:bg-zinc-800 disabled:opacity-50"
-          aria-label="Close"
-        >
-          <X size={18} />
+    <Sheet
+      open={open}
+      onClose={() => {
+        if (!isMutating) onClose()
+      }}
+      title={isEdit ? 'Edit Alarm' : 'Add Alarm'}
+      leading={(
+        <button type="button" onClick={onClose} disabled={isMutating} className="text-[17px] text-sky-400 active:opacity-50 disabled:text-zinc-600">
+          Cancel
         </button>
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
-          <Bell size={14} className="text-amber-400" />
-          {isEdit ? 'Edit Alarm' : 'New Alarm'}
-        </h2>
-        <button
-          onClick={() => void handleSave()}
-          disabled={isMutating || days.size === 0}
-          className="flex h-9 items-center gap-1.5 rounded-full bg-sky-500 px-4 text-xs font-semibold text-white active:bg-sky-600 disabled:opacity-50"
+      )}
+      trailing={(
+        <SheetAction onClick={() => void handleSave()} disabled={isMutating || days.size === 0}>
+          {isMutating ? 'Saving…' : 'Save'}
+        </SheetAction>
+      )}
+    >
+      <div className="space-y-6">
+        <ListSection>
+          <TimeInput label="Time" value={time} onChange={setTime} disabled={isMutating} />
+        </ListSection>
+
+        <ListSection header="Repeat" footer={days.size === 0 ? 'Pick at least one day.' : formatDays(Array.from(days))}>
+          <DayPicker value={days} onToggle={toggleDay} />
+        </ListSection>
+
+        <ListSection
+          header="Vibration"
+          footer="Pod 5 firmware fixes intensity and pattern, so only the length of the buzz changes."
         >
-          {isMutating ? <Loader2 size={12} className="animate-spin" /> : null}
-          Save
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
-        {/* Time */}
-        <div>
-          <TimeInput label="Wake at" value={time} onChange={setTime} disabled={isMutating} />
-        </div>
-
-        {/* Days */}
-        <div>
-          <span className="mb-2 block text-xs font-medium text-zinc-400">Repeat</span>
-          <div className="flex items-center justify-between gap-0.5 sm:gap-1">
-            {DAYS.map(({ key, short, label }) => {
-              const selected = days.has(key)
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleDay(key)}
-                  aria-label={label}
-                  aria-pressed={selected}
-                  className={clsx(
-                    'flex h-11 w-11 items-center justify-center rounded-full text-[13px] font-semibold transition-all',
-                    selected
-                      ? 'bg-sky-500 text-white'
-                      : 'bg-zinc-900 text-zinc-500 active:bg-zinc-800',
-                  )}
-                >
-                  {short}
-                </button>
-              )
-            })}
+          <div className="px-4 py-2.5">
+            <SegmentedControl
+              aria-label="Vibration length"
+              options={VIBRATION_PRESETS.map(p => ({ value: p.name, label: p.name }))}
+              value={presetValue}
+              onChange={(name) => {
+                const preset = VIBRATION_PRESETS.find(p => p.name === name)
+                if (preset) applyPreset(preset)
+              }}
+            />
           </div>
-        </div>
-
-        {/* Presets */}
-        <div>
-          <span className="mb-2 block text-xs font-medium text-zinc-400">Quick pick</span>
-          <div className="flex flex-wrap gap-1.5">
-            {VIBRATION_PRESETS.map(p => (
-              <button
-                key={p.name}
-                onClick={() => applyPreset(p)}
-                className={clsx(
-                  'rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors',
-                  duration === p.duration
-                    ? 'border-sky-500/60 bg-sky-500/15 text-sky-300'
-                    : 'border-zinc-700 bg-zinc-900 text-zinc-400 active:bg-zinc-800',
-                )}
-              >
-                {p.name}
-                {' '}
-                <span className="text-[9px] opacity-60">
-                  {p.duration}
-                  s
-                </span>
-              </button>
-            ))}
-          </div>
-          <p className="mt-1.5 text-[10px] text-zinc-600">
-            Intensity and pattern are firmware-clamped on Pod 5 — only duration affects the buzz.
-          </p>
-        </div>
-
-        {/* Duration */}
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-400">Duration</span>
-            <span className="text-xs font-medium text-white">
-              {duration}
-              s
-            </span>
-          </div>
-          <input
-            type="range"
+          <SliderRow
+            label="Duration"
+            value={`${duration} s`}
             min={1}
             max={180}
-            step={1}
-            value={duration}
-            onChange={e => setDuration(parseInt(e.target.value, 10))}
-            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-sky-500 [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-7 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-sky-500"
+            current={duration}
+            onChange={setDuration}
           />
-          <div className="flex justify-between text-[10px] text-zinc-600">
-            <span>1s</span>
-            <span>180s</span>
-          </div>
-        </div>
+        </ListSection>
 
-        {/* Temperature */}
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-400">Bed temperature at wake</span>
-            <span className="text-xs font-medium text-white">
-              {displayTemperature}
-              °
-              {unit}
-            </span>
-          </div>
-          <input
-            type="range"
+        <ListSection header="Bed temperature at wake">
+          <SliderRow
+            label="Temperature"
+            value={(
+              <span style={{ color: tempTint(Math.round(displayToSetpointF(displayTemperature, unit) ?? DEFAULT_TEMP)) }}>
+                {displayTemperature}
+                °
+                {unit}
+              </span>
+            )}
             min={minDisplayTemp}
             max={maxDisplayTemp}
-            step={1}
-            value={displayTemperature}
-            onChange={e => setDisplayTemperature(parseInt(e.target.value, 10))}
-            className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 accent-sky-500 [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-7 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-sky-500"
+            current={displayTemperature}
+            onChange={setDisplayTemperature}
           />
-          <div className="flex justify-between text-[10px] text-zinc-600">
-            <span>
-              {minDisplayTemp}
-              °
-              {unit}
-            </span>
-            <span>
-              {maxDisplayTemp}
-              °
-              {unit}
-            </span>
-          </div>
-        </div>
+        </ListSection>
 
-        {/* Test row */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
-          <div className="flex items-center gap-2">
-            <Vibrate size={14} className="text-amber-400" />
-            <p className="flex-1 text-xs text-zinc-300">
-              Test this pattern on the
-              {' '}
-              {side}
-              {' '}
-              side
-            </p>
-            {testAlarm.isPending && (
-              <Loader2 size={12} className="animate-spin text-zinc-400" />
-            )}
-          </div>
-          <div className="mt-2 flex gap-2">
-            <button
-              onClick={handleTest}
-              disabled={testAlarm.isPending}
-              className="flex flex-1 min-h-[40px] items-center justify-center gap-1.5 rounded-lg bg-sky-500/20 text-xs font-medium text-sky-400 transition-colors active:bg-sky-500/30 disabled:opacity-50"
-            >
-              <Vibrate size={12} />
-              Test
-            </button>
-            <button
-              onClick={handleStopTest}
-              disabled={clearAlarm.isPending}
-              className="flex flex-1 min-h-[40px] items-center justify-center gap-1.5 rounded-lg bg-zinc-800 text-xs font-medium text-zinc-300 transition-colors active:bg-zinc-700 disabled:opacity-50"
-            >
-              Stop
-            </button>
-          </div>
-          {testAlarm.error && (
-            <p className="mt-1.5 text-[11px] text-red-400">{testAlarm.error.message}</p>
-          )}
-        </div>
-
-        {/* Delete (edit mode) */}
-        {isEdit && (
-          <button
-            onClick={() => void handleDelete()}
-            disabled={isMutating}
-            className="flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 text-sm font-medium text-red-400 active:bg-red-500/10 disabled:opacity-50"
-          >
-            <Trash2 size={14} />
-            Delete alarm
-          </button>
-        )}
+        <ListSection
+          footer={testAlarm.error
+            ? <span className="text-red-400">{testAlarm.error.message}</span>
+            : `Buzzes the ${side} side now with this duration.`}
+        >
+          <ListRow
+            icon={Vibrate}
+            title="Test Vibration"
+            onClick={handleTest}
+            disabled={testAlarm.isPending}
+            accessory={testAlarm.isPending ? <Loader2 size={17} className="shrink-0 animate-spin text-zinc-500" /> : undefined}
+          />
+          <ListRow
+            icon={Square}
+            title="Stop"
+            onClick={handleStopTest}
+            disabled={clearAlarm.isPending}
+          />
+        </ListSection>
 
         {saveError && (
-          <p className="text-xs text-red-400">{saveError}</p>
+          <p className="px-4 text-[13px] text-red-400">{saveError}</p>
+        )}
+
+        {isEdit && (
+          <ListSection>
+            <DestructiveRow onClick={() => void handleDelete()} disabled={isMutating}>Delete Alarm</DestructiveRow>
+          </ListSection>
         )}
       </div>
+    </Sheet>
+  )
+}
+
+interface SliderRowProps {
+  label: string
+  value: ReactNode
+  min: number
+  max: number
+  current: number
+  onChange: (value: number) => void
+}
+
+/** Title + value on one line, a full-width slider underneath. */
+function SliderRow({ label, value, min, max, current, onChange }: SliderRowProps) {
+  return (
+    <div className="px-4 pb-1.5 pt-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[17px] text-white">{label}</span>
+        <span className="ios-numeric text-[17px] text-zinc-500">{value}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        value={current}
+        onChange={e => onChange(parseInt(e.target.value, 10))}
+        aria-label={label}
+        className="m-0 mt-2 block h-7 w-full accent-sky-500"
+      />
     </div>
   )
 }

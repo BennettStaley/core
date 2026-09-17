@@ -87,29 +87,50 @@ export function DaySelector({
   }
 
   return (
-    <div className="flex items-center justify-between gap-0.5 sm:gap-1">
+    <div className="flex items-center justify-between gap-1">
       {DAYS.map(({ key, short, label }) => {
         const isPrimary = key === activeDay
         const isSelected = selectedDays?.has(key) ?? isPrimary
 
         return (
-          <button
-            key={key}
-            type="button"
-            onClick={() => handleTap(key)}
-            aria-label={label}
-            aria-pressed={isSelected}
-            className={cn(
-              'flex h-11 w-11 items-center justify-center rounded-full text-[13px] font-semibold transition-all duration-150 sm:text-sm',
-              isSelected
-                ? 'bg-sky-500 text-white'
-                : 'bg-zinc-900 text-zinc-500 active:bg-zinc-800',
-            )}
-          >
-            {short}
-          </button>
+          <DayCircle key={key} short={short} label={label} selected={isSelected} onClick={() => handleTap(key)} />
         )
       })}
+    </div>
+  )
+}
+
+function DayCircle({ short, label, selected, onClick }: { short: string, label: string, selected: boolean, onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={selected}
+      className={cn(
+        'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[15px] font-semibold transition-colors duration-150',
+        selected
+          ? 'bg-sky-500 text-white'
+          : 'bg-zinc-800 text-zinc-300 active:bg-zinc-700',
+      )}
+    >
+      {short}
+    </button>
+  )
+}
+
+interface DayPickerProps {
+  value: ReadonlySet<DayOfWeek>
+  onToggle: (day: DayOfWeek) => void
+}
+
+/** Seven round day toggles (S M T W T F S) for a grouped-list row. */
+export function DayPicker({ value, onToggle }: DayPickerProps) {
+  return (
+    <div className="flex items-center justify-between gap-1 px-4 py-3">
+      {DAYS.map(({ key, short, label }) => (
+        <DayCircle key={key} short={short} label={label} selected={value.has(key)} onClick={() => onToggle(key)} />
+      ))}
     </div>
   )
 }

@@ -1,7 +1,6 @@
 'use client'
 
-import { Clock } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { calcDuration, formatTime12h } from '@/src/lib/scheduleTime'
 
 export { calcDuration, formatTime12h }
@@ -18,25 +17,27 @@ interface TimeInputProps {
 }
 
 /**
- * Touch-friendly time input with HH:MM format.
- * Uses native time input for mobile pickers.
+ * Grouped-list row with a title on the left and a native time field on the
+ * right, styled like the grey time pill in Clock/Calendar. The native input
+ * opens the iOS wheel picker on iPhone.
  */
 export function TimeInput({ label, value, onChange, disabled = false, icon, accentClass }: TimeInputProps) {
+  const id = useId()
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <label className="flex items-center gap-1.5 truncate text-xs font-medium text-zinc-400">
+    <div className="flex min-h-[44px] min-w-0 items-center justify-between gap-3 px-4 py-1.5">
+      <label htmlFor={id} className="flex min-w-0 items-center gap-2 truncate text-[17px] text-white">
         {icon && <span className={accentClass}>{icon}</span>}
         {label}
       </label>
-      <div className="relative min-w-0">
+      <div className="relative min-w-0 shrink-0">
         <input
+          id={id}
           type="time"
           value={value}
           onChange={e => onChange(e.target.value)}
           disabled={disabled}
-          className="h-11 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 pr-9 text-sm font-medium text-white outline-none transition-colors focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+          className="ios-numeric h-[34px] min-w-0 rounded-lg bg-zinc-800 px-2.5 text-center text-[17px] text-white outline-none [color-scheme:dark] focus-visible:ring-2 focus-visible:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
         />
-        <Clock size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" />
       </div>
     </div>
   )

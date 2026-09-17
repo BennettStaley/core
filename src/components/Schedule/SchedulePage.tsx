@@ -1,8 +1,6 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
-import { Plus } from 'lucide-react'
-import clsx from 'clsx'
 import { trpc } from '@/src/utils/trpc'
 import { useSchedule } from '@/src/hooks/useSchedule'
 import { useScheduleActive } from '@/src/hooks/useScheduleActive'
@@ -19,11 +17,15 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { ScheduleToggle } from './ScheduleToggle'
 import { SchedulerConfirmation } from './SchedulerConfirmation'
 import { AlarmSection } from './AlarmSection'
+import { AddRow } from './EditorRows'
+import { formatDays } from './scheduleFormat'
+import { ListSection, PageHeader, SegmentedControl } from '@/src/ui/ios'
 
 /**
- * Read-only schedule view: lists curves (groups of days sharing a temperature
- * schedule) with Edit/Delete actions per curve and a "+ Create New Curve"
- * button. All editing happens in the full-screen `CurveEditor`.
+ * Schedule tab: large title, side switcher, master schedule switch, then
+ * inset grouped lists of curves (groups of days sharing a temperature
+ * schedule) and alarms. Tapping a curve opens `CurveEditor` in a sheet, which
+ * also hosts Delete.
  */
 export function SchedulePage() {
   const { primarySide: side, selectedSide, selectSide } = useSide()
@@ -76,19 +78,18 @@ export function SchedulePage() {
     setCreatingCurve(true)
   }, [])
 
-  const handleDelete = useCallback((group: ScheduleGroup) => {
-    const labelDays = group.days.length === 7
-      ? 'every day'
-      : group.days.length === 1
-        ? group.days[0]
-        : `${group.days.length} days`
-    setPendingDelete({ days: group.days, label: labelDays })
+  const handleDelete = useCallback((days: DayOfWeek[]) => {
+    const labelDays = days.length === 7 ? 'every day' : formatDays(days)
+    setPendingDelete({ days, label: labelDays })
   }, [])
 
   const confirmDelete = useCallback(async () => {
     if (!pendingDelete) return
     try {
       await deleteCurve(pendingDelete.days)
+      // The curve is gone — close its editor too.
+      setEditingCurve(null)
+      setCreatingCurve(false)
     }
     finally {
       setPendingDelete(null)
@@ -100,58 +101,61 @@ export function SchedulePage() {
     setCreatingCurve(false)
   }, [])
 
-  return (
-    <div className="space-y-3 sm:space-y-4">
-      {/* Side selector — left / right / both (writes apply to selection) */}
-      <div className="mb-4 sm:mb-5">
-        <SideSelector
-          value={selectedSide}
-          onChange={selectSide}
-          leftName={leftName}
-          rightName={rightName}
-        />
-      </div>
+  const sideOptions: Array<{ value: SideSelection, label: string }> = [
+    { value: 'left', label: leftName },
+    { value: 'right', label: rightName },
+    { value: 'both', label: 'Both' },
+  ]
 
-      {/* Schedule on/off toggle */}
+  return (
+    <div className="space-y-6 pb-4">
+      <PageHeader title="Schedule" />
+
+      {/* Side selector — left / right / both (writes apply to selection) */}
+      <SegmentedControl
+        aria-label="Side"
+        options={sideOptions}
+        value={selectedSide}
+        onChange={selectSide}
+      />
+
       <ScheduleToggle
         enabled={isPowerEnabled}
         onToggle={() => void toggleAllSchedules()}
         isLoading={isMutating || hookLoading}
       />
 
-      {/* Confirmation banner */}
+      {/* Confirmation toast */}
       <SchedulerConfirmation
         message={confirmMessage}
         isLoading={isApplying}
         variant={confirmMessage?.includes('Failed') ? 'error' : 'success'}
       />
 
-      {/* Error state */}
       {error && (
-        <div className="rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          Failed to load schedules:
+        <p className="px-4 text-[15px] text-red-400">
+          Couldn&apos;t load schedules:
           {' '}
           {error.message}
-        </div>
+        </p>
       )}
 
-      {/* Loading state */}
       {isLoading && !data && (
-        <div className="h-24 animate-pulse rounded-2xl bg-zinc-900" />
+        <div className="h-[132px] animate-pulse rounded-xl bg-zinc-900" />
       )}
 
       {/* Empty state */}
       {!isLoading && !hasAnyCurves && (
-        <div className="rounded-2xl border border-dashed border-sky-500/30 bg-sky-500/5 p-6 text-center">
-          <p className="text-sm font-medium text-white">No schedule yet</p>
-          <p className="mt-1 text-xs text-zinc-400">
-            Create a sleep curve to automatically control bed temperature
+        <div className="pb-2 pt-6 text-center">
+          <p className="text-[20px] font-semibold leading-[25px] text-white">No Sleep Curves</p>
+          <p className="mx-auto mt-1.5 max-w-[320px] px-4 text-[15px] leading-5 text-zinc-500">
+            Curves cool and warm the bed through the night, and switch the Pod on and off for you.
           </p>
           <button
+            type="button"
             onClick={handleCreate}
-            className="mt-4 inline-flex h-10 items-center gap-1.5 rounded-xl bg-sky-500 px-4 text-sm font-semibold text-white active:bg-sky-600"
+            className="mt-5 h-[50px] w-full rounded-xl bg-sky-500 text-[17px] font-semibold text-white active:bg-sky-600"
           >
-            <Plus size={14} />
             Create Sleep Curve
           </button>
         </div>
@@ -159,31 +163,18 @@ export function SchedulePage() {
 
       {/* Curves list */}
       {hasAnyCurves && (
-        <>
-          <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
-            Curves
-          </p>
-          <div className="space-y-2">
-            {visibleGroups.map(group => (
-              <CurveCard
-                key={group.key}
-                group={group}
-                onEdit={() => handleEdit(group)}
-                onDelete={() => handleDelete(group)}
-                isActive={group.key === activeCurveKey}
-                nextEvent={group.key === activeCurveKey ? nextEvent : null}
-              />
-            ))}
-          </div>
-
-          <button
-            onClick={handleCreate}
-            className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-zinc-700 text-sm font-medium text-zinc-400 active:bg-zinc-900"
-          >
-            <Plus size={14} />
-            Create New Curve
-          </button>
-        </>
+        <ListSection header="Curves">
+          {visibleGroups.map(group => (
+            <CurveCard
+              key={group.key}
+              group={group}
+              onEdit={() => handleEdit(group)}
+              isActive={group.key === activeCurveKey}
+              nextEvent={group.key === activeCurveKey ? nextEvent : null}
+            />
+          ))}
+          <AddRow onClick={handleCreate}>New Curve</AddRow>
+        </ListSection>
       )}
 
       {/* Alarms — wake the user with a cover vibration at a scheduled time */}
@@ -195,53 +186,20 @@ export function SchedulePage() {
         onClose={closeEditor}
         initialDays={editingCurve?.days ?? []}
         initialSetPoints={editingCurve?.setPoints ?? []}
+        onDelete={editingCurve ? () => handleDelete(editingCurve.days) : undefined}
       />
 
       {/* Delete confirmation */}
       <ConfirmDialog
         open={pendingDelete !== null}
-        title="Delete curve?"
-        message={`This will remove the schedule for ${pendingDelete?.label ?? ''}. The Pod won't change temperature on those days until you create a new curve.`}
+        title="Delete Curve?"
+        message={`This removes the schedule for ${pendingDelete?.label ?? ''}. The Pod won't change temperature on those days until you create a new curve.`}
         confirmLabel="Delete"
         variant="danger"
+        busy={isMutating}
         onConfirm={() => void confirmDelete()}
         onCancel={() => setPendingDelete(null)}
       />
-    </div>
-  )
-}
-
-interface SideSelectorProps {
-  value: SideSelection
-  onChange: (side: SideSelection) => void
-  leftName: string
-  rightName: string
-}
-
-function SideSelector({ value, onChange, leftName, rightName }: SideSelectorProps) {
-  const tabs: Array<{ value: SideSelection, label: string }> = [
-    { value: 'left', label: leftName },
-    { value: 'right', label: rightName },
-    { value: 'both', label: 'Both' },
-  ]
-  return (
-    <div className="flex rounded-xl bg-zinc-900 p-1">
-      {tabs.map(tab => (
-        <button
-          key={tab.value}
-          type="button"
-          onClick={() => onChange(tab.value)}
-          aria-pressed={value === tab.value}
-          className={clsx(
-            'flex-1 truncate rounded-lg px-3 py-2 text-xs font-semibold transition-colors',
-            value === tab.value
-              ? 'bg-sky-500 text-white'
-              : 'text-zinc-400 active:bg-zinc-800',
-          )}
-        >
-          {tab.label}
-        </button>
-      ))}
     </div>
   )
 }
