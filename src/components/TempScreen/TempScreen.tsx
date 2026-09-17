@@ -17,19 +17,19 @@ import { displayToSetpointF, setpointFToDisplay, type TempUnit } from '@/src/lib
 import { TEMP } from '@/src/lib/tempColors'
 import { Minus, Plus, Power } from 'lucide-react'
 import clsx from 'clsx'
+import { PageHeader } from '@/src/ui/ios'
+import { StatusChips } from '@/src/components/StatusChips/StatusChips'
 
 /**
  * Main temperature screen — mirrors iOS TempScreen.swift composition.
  *
- * Layout:
- * 1. PrimingIndicator (when pod is priming water system)
- * 2. PrimeCompleteNotification (dismissible, after priming finishes)
- * 3. AlarmBanner (when vibration alarm is active, with snooze/stop)
- * 4. TemperatureDial (270° circular dial with draggable thumb — matches iOS TemperatureDialView)
- * 5. Temp controls (+/- buttons, power toggle)
- * 6. EnvironmentInfoPanel (ambient temp, humidity, bed temp)
- * 7. UserSelector (at bottom for easy thumb reach)
- * SideSelector is rendered here (Temp screen only, not in the global layout).
+ * Layout ("Tonight"):
+ * 1. PageHeader with StatusChips (away / night)
+ * 2. SideSelector (segmented Left/Right + link button)
+ * 3. Notices: pump stall, priming, prime complete, alarm
+ * 4. TemperatureDial (270° dial with draggable thumb)
+ * 5. Temp controls (− / power / +)
+ * 6. EnvironmentInfoPanel footnote (inside temp, ambient light)
  *
  * Device router wiring:
  * - device.getStatus (query, 7s poll) → current/target temp, power, alarm, priming, snooze
@@ -132,17 +132,28 @@ export const TempScreen = () => {
     }
   }
 
+  const header = <PageHeader title="Tonight" trailing={<StatusChips />} />
+
   if (statusLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <span className="text-sm text-zinc-500">Connecting…</span>
+      <div className="flex flex-col gap-4">
+        {header}
+        <div className="flex items-center justify-center py-20">
+          <span className="text-[15px] text-zinc-500">Connecting…</span>
+        </div>
       </div>
     )
   }
 
+  const stepButtonClass = clsx(
+    'flex h-14 w-14 items-center justify-center rounded-full bg-zinc-800 text-white transition-opacity',
+    'active:opacity-60 disabled:opacity-40',
+  )
+
   return (
-    <div className="flex flex-col gap-3 sm:gap-4">
-      {/* Side selector — only on the Temp screen */}
+    <div className="flex flex-col gap-4 pb-4">
+      {header}
+
       <SideSelector />
 
       {/* Pump stall — highest priority, dismissible per-side */}
@@ -166,11 +177,7 @@ export const TempScreen = () => {
       )}
 
       {/* Priming indicator — shown when pod water system is actively priming */}
-      {isPriming && (
-        <div className="flex justify-center">
-          <PrimingIndicator />
-        </div>
-      )}
+      {isPriming && <PrimingIndicator />}
 
       {/* Prime completion notification — dismissible */}
       {hasPrimeNotification && !isPriming && (
@@ -185,66 +192,58 @@ export const TempScreen = () => {
         onActionComplete={refetch}
       />
 
-      {/* Circular temperature dial — matches iOS TemperatureDialView */}
-      <TemperatureDial
-        currentTempF={currentTemp}
-        targetTempF={targetTemp}
-        isOn={isOn}
-        unit={unit}
-        onTemperatureChange={handleDialChange}
-        onTemperatureCommit={handleDialCommit}
-      />
+      <div className="flex flex-col items-center pt-2">
+        <TemperatureDial
+          currentTempF={currentTemp}
+          targetTempF={targetTemp}
+          isOn={isOn}
+          unit={unit}
+          onTemperatureChange={handleDialChange}
+          onTemperatureCommit={handleDialCommit}
+        />
 
-      {/* Temperature controls: −/power/+ (tight gap to dial to avoid mobile scroll) */}
-      <div className="-mt-2 flex items-center justify-center gap-4 sm:mt-0 sm:gap-6">
-        {/* Minus button */}
-        <button
-          onClick={() => handleTempAdjust(-1)}
-          disabled={!isOn || setTempMutation.isPending}
-          className={clsx(
-            'flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-all duration-200 sm:h-14 sm:w-14',
-            'bg-zinc-900 text-zinc-400 active:bg-zinc-800 active:scale-95',
-            'disabled:cursor-default disabled:opacity-30 disabled:active:scale-100',
-          )}
-        >
-          <Minus size={22} />
-        </button>
+        {/* Temperature controls: − / power / + */}
+        <div className="flex items-center justify-center gap-8">
+          <button
+            type="button"
+            onClick={() => handleTempAdjust(-1)}
+            disabled={!isOn || setTempMutation.isPending}
+            aria-label="Decrease temperature"
+            className={stepButtonClass}
+          >
+            <Minus size={24} strokeWidth={2} />
+          </button>
 
-        {/* Power button */}
-        <button
-          onClick={handlePowerToggle}
-          disabled={setPowerMutation.isPending}
-          className={clsx(
-            'flex h-14 w-14 cursor-pointer items-center justify-center rounded-full transition-all duration-200 sm:h-16 sm:w-16',
-            'active:scale-95',
-            isOn
-              ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
-              : 'bg-zinc-900 text-zinc-600 border border-transparent',
-          )}
-        >
-          <Power size={26} />
-        </button>
+          <button
+            type="button"
+            onClick={handlePowerToggle}
+            disabled={setPowerMutation.isPending}
+            aria-label={isOn ? 'Turn off' : 'Turn on'}
+            aria-pressed={isOn}
+            className={clsx(
+              'flex h-16 w-16 items-center justify-center rounded-full transition-colors active:opacity-60',
+              isOn ? 'bg-sky-500 text-white' : 'bg-zinc-800 text-zinc-400',
+            )}
+          >
+            <Power size={26} strokeWidth={2} />
+          </button>
 
-        {/* Plus button */}
-        <button
-          onClick={() => handleTempAdjust(1)}
-          disabled={!isOn || setTempMutation.isPending}
-          className={clsx(
-            'flex h-12 w-12 cursor-pointer items-center justify-center rounded-full transition-all duration-200 sm:h-14 sm:w-14',
-            'bg-zinc-900 text-zinc-400 active:bg-zinc-800 active:scale-95',
-            'disabled:cursor-default disabled:opacity-30 disabled:active:scale-100',
-          )}
-        >
-          <Plus size={22} />
-        </button>
+          <button
+            type="button"
+            onClick={() => handleTempAdjust(1)}
+            disabled={!isOn || setTempMutation.isPending}
+            aria-label="Increase temperature"
+            className={stepButtonClass}
+          >
+            <Plus size={24} strokeWidth={2} />
+          </button>
+        </div>
       </div>
 
-      {/* Environment info: home temp + lux (matching iOS) */}
-      <EnvironmentInfoPanel unit={unit} />
-      <div className="flex items-center justify-center">
+      {/* Environment footnote: inside temp + ambient light */}
+      <EnvironmentInfoPanel unit={unit}>
         <AmbientLightChip />
-      </div>
-
+      </EnvironmentInfoPanel>
     </div>
   )
 }

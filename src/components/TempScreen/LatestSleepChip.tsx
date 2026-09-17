@@ -29,12 +29,13 @@ export function LatestSleepChip() {
   if (!latest) return null
 
   return (
-    <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-      <Moon size={12} className="text-indigo-400" />
+    <p className="ios-numeric flex items-center gap-1.5 text-[13px] text-zinc-500">
+      <Moon size={13} className="text-zinc-500" />
       <span>
-        Last night:
+        Last night
+        {' '}
         {formatDuration(latest.sleepDurationSeconds)}
       </span>
-    </div>
+    </p>
   )
 }

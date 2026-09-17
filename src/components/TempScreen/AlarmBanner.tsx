@@ -19,7 +19,7 @@ interface AlarmBannerProps {
 
 /**
  * Alarm banner shown on Temp screen when vibration alarm is active.
- * Matches iOS AlarmBanner — yellow/tan color scheme with Snooze and Stop buttons.
+ * Grouped card with an orange bell and Snooze / Stop actions along the bottom.
  */
 export const AlarmBanner = ({
   leftAlarmActive,
@@ -97,15 +97,15 @@ export const AlarmBanner = ({
   const isPending = clearAlarmMutation.isPending || snoozeAlarmMutation.isPending
 
   return (
-    <div className="rounded-2xl border border-amber-500/20 bg-amber-950/30 p-3 sm:p-4">
+    <div className="overflow-hidden rounded-xl bg-zinc-900">
       {/* Active alarm */}
       {isAnyAlarmActive && (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <Bell size={18} className="shrink-0 text-amber-400" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-amber-200">Alarm Active</p>
-              <p className="text-xs text-amber-400/70">
+        <>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Bell size={20} className="shrink-0 text-amber-500" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[17px] font-semibold leading-[22px] text-white">Alarm</p>
+              <p className="text-[15px] leading-5 text-zinc-500">
                 {alarmSides.join(' & ')}
                 {' '}
                 side vibrating
@@ -113,32 +113,32 @@ export const AlarmBanner = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-2 border-t border-zinc-800">
             <button
               onClick={handleSnooze}
               disabled={isPending}
-              className="flex flex-1 min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-amber-900/40 px-3 py-2.5 text-sm font-medium text-amber-200 transition-all active:scale-95 disabled:opacity-50"
+              className="flex min-h-[44px] items-center justify-center gap-1.5 text-[17px] text-sky-400 active:bg-zinc-800 disabled:opacity-40"
             >
-              <Clock size={14} />
+              <Clock size={17} />
               Snooze 5m
             </button>
             <button
               onClick={handleStop}
               disabled={isPending}
-              className="flex flex-1 min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-amber-900/40 px-3 py-2.5 text-sm font-medium text-amber-200 transition-all active:scale-95 disabled:opacity-50"
+              className="flex min-h-[44px] items-center justify-center gap-1.5 border-l border-zinc-800 text-[17px] font-semibold text-sky-400 active:bg-zinc-800 disabled:opacity-40"
             >
-              <BellOff size={14} />
+              <BellOff size={17} />
               Stop
             </button>
           </div>
-        </div>
+        </>
       )}
 
       {/* Snoozed alarm (when not actively vibrating) */}
       {!isAnyAlarmActive && isAnySnoozed && (
-        <div className="flex items-center gap-2">
-          <Clock size={16} className="shrink-0 text-amber-400/60" />
-          <p className="flex-1 text-sm text-amber-300/70">
+        <div className="flex min-h-[44px] items-center gap-3 py-1 pl-4 pr-2">
+          <Clock size={20} className="shrink-0 text-amber-500" />
+          <p className="ios-numeric min-w-0 flex-1 text-[15px] leading-5 text-white">
             Snoozed —
             {' '}
             {snoozeSides.join(' & ')}
@@ -154,7 +154,7 @@ export const AlarmBanner = ({
           <button
             onClick={handleStop}
             disabled={isPending}
-            className="rounded-lg bg-amber-900/40 px-3 min-h-[44px] text-xs font-medium text-amber-200 transition-all active:scale-95 disabled:opacity-50"
+            className="min-h-[44px] shrink-0 px-2 text-[17px] text-sky-400 active:opacity-50 disabled:opacity-40"
           >
             Cancel
           </button>

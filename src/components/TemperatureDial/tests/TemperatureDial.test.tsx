@@ -96,15 +96,15 @@ describe('TemperatureDial', () => {
     expect(screen.queryByText('NOW')).toBeNull()
   })
 
-  it.each([[70, 'WARMING'], [80, 'COOLING']] as const)('shows the direction from %i°F', (currentTempF, label) => {
+  it.each([[70, 'Warming'], [80, 'Cooling']] as const)('shows the direction from %i°F', (currentTempF, label) => {
     setup({ currentTempF })
     expect(screen.getByText(label)).toBeTruthy()
   })
 
   it('shows no direction at the target and supports preview-only consumers', () => {
     const { dial, at, onTemperatureChange } = setup({ onTemperatureCommit: undefined })
-    expect(screen.queryByText('WARMING')).toBeNull()
-    expect(screen.queryByText('COOLING')).toBeNull()
+    expect(screen.queryByText('Warming')).toBeNull()
+    expect(screen.queryByText('Cooling')).toBeNull()
     fireEvent.keyDown(dial, { key: 'ArrowUp' })
     fireEvent.pointerDown(dial, at(162, 22))
     fireEvent.pointerUp(dial, at(162, 22))

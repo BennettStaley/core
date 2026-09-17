@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, Timer } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { trpc } from '@/src/utils/trpc'
 import { formatTemp, type TempUnit } from '@/src/lib/tempUtils'
 
@@ -9,15 +9,16 @@ interface EnvironmentInfoProps {
   secondsRemaining?: number | null
   /** Temperature unit preference */
   unit?: TempUnit
+  /** Extra trailing items for the footnote line (e.g. ambient light). */
+  children?: ReactNode
 }
 
 /**
- * Horizontal info bar showing environment data.
- * Matches iOS EnvironmentInfoView layout:
- * - Home/inside temperature (ambient sensor)
+ * Quiet footnote line under the dial with environment data:
+ * - Inside (room) temperature from the bed temp sensor
  * - Auto-off timer countdown (when active)
  */
-export const EnvironmentInfoPanel = ({ secondsRemaining, unit = 'F' }: EnvironmentInfoProps) => {
+export const EnvironmentInfoPanel = ({ secondsRemaining, unit = 'F', children }: EnvironmentInfoProps) => {
   const { data: bedTemp } = trpc.environment.getLatestBedTemp.useQuery(
     { unit },
     { refetchInterval: 10_000 },
@@ -33,28 +34,30 @@ export const EnvironmentInfoPanel = ({ secondsRemaining, unit = 'F' }: Environme
     return `${minutes}m`
   }
 
-  if (ambientTemp == null && !(secondsRemaining != null && secondsRemaining > 0)) {
+  const hasAmbient = ambientTemp != null && ambientTemp > 0
+  const hasTimer = secondsRemaining != null && secondsRemaining > 0
+
+  if (!hasAmbient && !hasTimer && !children) {
     return null
   }
 
   return (
-    <div className="flex items-center justify-center gap-4 mt-6">
-      {/* Home/Inside Temperature — inline: icon + temp + "Inside" */}
-      {ambientTemp != null && ambientTemp > 0 && (
-        <div className="flex items-center gap-2 text-zinc-500">
-          <Home size={18} />
-          <span className="text-sm">{formatTemp(ambientTemp, unit)}</span>
-          <span className="text-sm">Inside</span>
-        </div>
+    <p className="ios-numeric flex flex-wrap items-center justify-center gap-x-4 text-center text-[13px] leading-[18px] text-zinc-500">
+      {hasAmbient && (
+        <span>
+          Inside
+          {' '}
+          {formatTemp(ambientTemp, unit)}
+        </span>
       )}
-
-      {/* Auto-off Timer */}
-      {secondsRemaining != null && secondsRemaining > 0 && (
-        <div className="flex items-center gap-2 text-zinc-500">
-          <Timer size={18} />
-          <span className="text-sm">{formatTimeRemaining(secondsRemaining)}</span>
-        </div>
+      {hasTimer && (
+        <span>
+          Off in
+          {' '}
+          {formatTimeRemaining(secondsRemaining)}
+        </span>
       )}
-    </div>
+      {children}
+    </p>
   )
 }
