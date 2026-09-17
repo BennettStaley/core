@@ -44,14 +44,14 @@ function Row({ a, onToggle, onOpen }: { a: ListItem, onToggle: (id: number, enab
           onOpen(a)
         }
       }}
-      className="group grid cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-4 border-b border-zinc-800/60 px-5 py-4 transition-colors hover:bg-zinc-900/40 focus:outline-none focus:ring-2 focus:ring-zinc-500/60"
+      className="group grid cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-zinc-800/60 px-4 py-4 md:gap-4 md:px-5 transition-colors hover:bg-zinc-900/40 focus:outline-none focus:ring-2 focus:ring-zinc-500/60"
     >
       <div onClick={e => e.stopPropagation()} className="pt-0.5">
         <Toggle checked={a.enabled} onChange={() => onToggle(a.id, !a.enabled)} />
       </div>
       <div className="min-w-0">
-        <div className="flex items-center gap-2.5 mb-1">
-          <span className="truncate text-[14px] font-medium text-zinc-100">{a.name}</span>
+        <div className="mb-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <span className="min-w-0 truncate text-[14px] font-medium text-zinc-100">{a.name}</span>
           <StatusBadge mode={a.enabled ? a.mode : 'paused'} />
           <SideBadge side={a.side} />
         </div>
@@ -79,7 +79,7 @@ function Row({ a, onToggle, onOpen }: { a: ListItem, onToggle: (id: number, enab
 
 function EmptyState({ onNew }: { onNew: () => void }) {
   return (
-    <div className="grid place-items-center px-6 py-24">
+    <div className="grid place-items-center px-5 py-12 md:px-6 md:py-24">
       <div className="max-w-md text-center">
         <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl border border-zinc-800 bg-zinc-900/60" style={{ color: 'var(--accent)' }}>
           <Icon.Sliders size={26} />
@@ -131,9 +131,9 @@ export function AutomationsList({ items, loading, onToggle, onOpen, onNew }: {
   const empty = !loading && items.length === 0
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between gap-4 border-b border-zinc-800 px-5 py-4">
-        <div>
-          <h1 className="text-[19px] font-semibold tracking-tight text-zinc-100">Automations</h1>
+      <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3 md:gap-4 md:px-5 md:py-4">
+        <div className="min-w-0">
+          <h1 className="hidden text-[19px] font-semibold tracking-tight text-zinc-100 md:block">Automations</h1>
           <p className="text-[12px] text-zinc-500 mt-0.5">
             {empty
               ? 'Reactive rules that respond to live signals'
@@ -157,7 +157,8 @@ export function AutomationsList({ items, loading, onToggle, onOpen, onNew }: {
         {!empty && (
           <Button variant="accent" size="md" onClick={onNew}>
             <Icon.Plus size={15} />
-            New automation
+            <span className="md:hidden">New</span>
+            <span className="hidden md:inline">New automation</span>
           </Button>
         )}
       </div>

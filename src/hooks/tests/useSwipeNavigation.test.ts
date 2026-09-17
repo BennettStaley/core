@@ -103,7 +103,7 @@ describe('useSwipeNavigation', () => {
   })
 
   it('does not navigate past the last screen', () => {
-    navMock.pathname = '/en/settings'
+    navMock.pathname = '/en/more'
     const { result } = renderHook(() => useSwipeNavigation())
     act(() => {
       result.current.onTouchStart(touchEvent([{ clientX: 200, clientY: 100 }]))

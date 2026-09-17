@@ -13,34 +13,67 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/components/BottomNav/BottomNav.tsx:14
-msgid "Biometrics"
-msgstr "Biometrics"
+#: src/components/BottomNav/BottomNav.tsx:20
+msgid "Autopilot"
+msgstr "Autopilot"
 
-#: src/components/BottomNav/BottomNav.tsx:18
+#: src/components/More/MoreScreen.tsx:37
+msgid "Device, sides, gestures, HomeKit"
+msgstr "Device, sides, gestures, HomeKit"
+
+#: src/components/More/MoreScreen.tsx:62
 msgid "Diagnostics"
 msgstr "Diagnostics"
 
-#: app/[lang]/health/page.tsx:13
-msgid "Hello, tRPC test page!"
-msgstr "Hello, tRPC test page!"
+#: src/components/More/MoreScreen.tsx:56
+msgid "Live presence, bed temperature, humidity"
+msgstr "Live presence, bed temperature, humidity"
+
+#: src/components/BottomNav/BottomNav.tsx:21
+#: src/components/More/MoreScreen.tsx:72
+msgid "More"
+msgstr "More"
 
 #: src/components/WifiSignalStrength/WifiSignalStrength.tsx:45
 msgid "Offline"
 msgstr "Offline"
 
-#: src/components/BottomNav/BottomNav.tsx:13
+#: src/components/More/MoreScreen.tsx:30
+msgid "Pod"
+msgstr "Pod"
+
+#: src/components/BottomNav/BottomNav.tsx:18
 msgid "Schedule"
 msgstr "Schedule"
 
-#: src/components/BottomNav/BottomNav.tsx:15
+#: src/components/More/MoreScreen.tsx:55
 msgid "Sensors"
 msgstr "Sensors"
 
-#: src/components/BottomNav/BottomNav.tsx:16
+#: src/components/More/MoreScreen.tsx:44
+msgid "Service health, updates, logs"
+msgstr "Service health, updates, logs"
+
+#: src/components/More/MoreScreen.tsx:36
+msgid "Settings"
+msgstr "Settings"
+
+#: src/components/BottomNav/BottomNav.tsx:19
+msgid "Sleep"
+msgstr "Sleep"
+
+#: src/components/More/MoreScreen.tsx:43
 msgid "Status"
 msgstr "Status"
 
-#: src/components/BottomNav/BottomNav.tsx:12
-msgid "Temp"
-msgstr "Temp"
+#: src/components/More/MoreScreen.tsx:63
+msgid "Thermal delivery and scheduler internals"
+msgstr "Thermal delivery and scheduler internals"
+
+#: src/components/BottomNav/BottomNav.tsx:17
+msgid "Tonight"
+msgstr "Tonight"
+
+#: src/components/More/MoreScreen.tsx:49
+msgid "Tools"
+msgstr "Tools"

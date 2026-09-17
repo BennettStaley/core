@@ -1,8 +1,8 @@
 /**
- * Autopilot console — the full-bleed desktop surface that hosts the Automations
- * list, the Rule editor (modal), and the Diagnostics/status panel behind a
- * left side-nav. Breaks out of the app's mobile `max-w-md` shell the same way
- * the diagnostics console does. Owns all tRPC data + mutations.
+ * Autopilot console — hosts the Automations list, the Rule editor (modal), and
+ * the Diagnostics/status panel. On phones it stays inside the app shell with a
+ * segmented switcher; from md up it breaks out of the `max-w-md` shell into the
+ * full-bleed desktop layout with a left side-nav. Owns all tRPC data + mutations.
  */
 'use client'
 
@@ -102,11 +102,33 @@ export function AutopilotConsole() {
   const activeCount = items.filter(i => i.enabled && i.mode === 'active').length
 
   return (
-    <div className="ap-console mx-[calc(50%-50vw)] w-screen px-4 text-zinc-100" style={{ ['--accent' as string]: ACCENT }}>
+    <div className="ap-console text-zinc-100 md:mx-[calc(50%-50vw)] md:w-screen md:px-4" style={{ ['--accent' as string]: ACCENT }}>
       <style dangerouslySetInnerHTML={{ __html: SCOPED_CSS }} />
+      {/* phone header: title, running state, and a segmented screen switcher */}
+      <div className="mb-3 space-y-3 md:hidden">
+        <div className="flex items-center justify-between px-1">
+          <h1 className="text-3xl font-bold tracking-tight text-white">Autopilot</h1>
+          <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${killed ? 'bg-red-500/15 text-red-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${killed ? 'bg-red-400' : 'bg-emerald-400'}`} />
+            {killed ? 'Halted' : `${activeCount} active`}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-zinc-900 p-1 text-[13px] font-medium">
+          {([['list', `Automations (${items.length})`], ['status', 'Diagnostics']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setScreen(id)}
+              className={`min-h-[36px] rounded-lg transition-colors ${screen === id ? 'bg-zinc-700 text-white' : 'text-zinc-400'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="mx-auto flex max-w-[1500px] gap-4">
-        {/* side nav */}
-        <aside className="flex w-[212px] shrink-0 flex-col self-start rounded-xl border border-zinc-800 bg-zinc-950/80">
+        {/* side nav (md+) */}
+        <aside className="hidden w-[212px] shrink-0 flex-col self-start rounded-xl border border-zinc-800 bg-zinc-950/80 md:flex">
           <div className="flex items-center gap-2.5 px-4 py-4">
             <span className="grid h-8 w-8 place-items-center rounded-lg" style={{ background: 'color-mix(in srgb, var(--accent) 16%, transparent)', color: 'var(--accent)' }}>
               <Icon.Sliders size={17} />
@@ -134,7 +156,7 @@ export function AutopilotConsole() {
         </aside>
 
         {/* content */}
-        <main className="min-w-0 flex-1 rounded-xl border border-zinc-800 bg-zinc-950/60 overflow-hidden" style={{ minHeight: 'calc(100dvh - 7rem)' }}>
+        <main className="min-w-0 flex-1 rounded-xl border border-zinc-800 bg-zinc-950/60 overflow-hidden" style={{ minHeight: 'min(calc(100dvh - 7rem), 100%)' }}>
           {screen === 'list' && (
             <AutomationsList
               items={items}

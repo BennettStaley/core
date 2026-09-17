@@ -2,25 +2,23 @@
 
 import { msg } from '@lingui/core/macro'
 import { useLingui } from '@lingui/react'
-import { Activity, BarChart3, Calendar, Gauge, Radio, Thermometer } from 'lucide-react'
+import { Calendar, Ellipsis, Moon, SlidersHorizontal, Thermometer } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import { useScheduleActive } from '@/src/hooks/useScheduleActive'
 
+/**
+ * iOS-style tab bar. Everyday surfaces get a tab; tools (sensors, status,
+ * settings, diagnostics) live under More so the bar stays at five items.
+ * `matches` lists extra route prefixes that should highlight the tab.
+ */
 const tabs = [
-  { id: 'temp', icon: Thermometer, label: msg`Temp`, href: '/' },
-  { id: 'schedule', icon: Calendar, label: msg`Schedule`, href: '/schedule' },
-  { id: 'data', icon: BarChart3, label: msg`Biometrics`, href: '/data' },
-  { id: 'sensors', icon: Radio, label: msg`Sensors`, href: '/sensors' },
-  { id: 'status', icon: Activity, label: msg`Status`, href: '/status' },
-  // Autopilot console — hidden from nav until P2 wires biometric/ambient/enum signals
-  // (sleepypod-core-69). The page still lives at /autopilot (deep-link) and the /debug
-  // Autopilot panel surfaces live engine state for dogfooding. Re-add SlidersHorizontal
-  // import + this entry to re-expose:
-  // { id: 'autopilot', icon: SlidersHorizontal, label: msg`Autopilot`, href: '/autopilot', desktopOnly: true },
-  // Diagnostics console — desktop/tablet only; phones reach it via the Status card.
-  { id: 'debug', icon: Gauge, label: msg`Diagnostics`, href: '/debug', desktopOnly: true },
+  { id: 'temp', icon: Thermometer, label: msg`Tonight`, href: '/', matches: [] as string[] },
+  { id: 'schedule', icon: Calendar, label: msg`Schedule`, href: '/schedule', matches: [] as string[] },
+  { id: 'data', icon: Moon, label: msg`Sleep`, href: '/data', matches: [] as string[] },
+  { id: 'autopilot', icon: SlidersHorizontal, label: msg`Autopilot`, href: '/autopilot', matches: [] as string[] },
+  { id: 'more', icon: Ellipsis, label: msg`More`, href: '/more', matches: ['/sensors', '/status', '/settings', '/debug'] },
 ]
 
 /**
@@ -33,48 +31,50 @@ export const BottomNav = () => {
   const { isActive: scheduleActive } = useScheduleActive()
 
   // Extract the path segment after /[lang]/ to determine active tab
-  const getIsActive = (href: string) => {
+  const getIsActive = (href: string, matches: string[]) => {
     if (!pathname) return false
     // Remove the language prefix (e.g., /en/schedule -> /schedule)
     const segments = pathname.split('/')
     const pathWithoutLang = '/' + segments.slice(2).join('/')
     if (href === '/') return pathWithoutLang === '/' || pathWithoutLang === ''
-    return pathWithoutLang.startsWith(href)
+    return [href, ...matches].some(prefix => pathWithoutLang.startsWith(prefix))
   }
 
   // Get the language prefix from the current pathname
   const lang = pathname?.split('/')[1] ?? 'en'
 
   return (
-    <nav className="pb-safe fixed inset-x-0 bottom-0 border-t border-zinc-900 bg-black/90 px-2 py-2 sm:px-4 sm:py-3">
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-900 bg-black/85 px-2 pt-1.5 backdrop-blur-xl"
+      style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom, 0px))' }}
+    >
       <div className="mx-auto flex max-w-md justify-between md:max-w-lg">
         {tabs.map((tab) => {
-          const isActive = getIsActive(tab.href)
+          const isActive = getIsActive(tab.href, tab.matches)
           return (
             <Link
               key={tab.id}
               href={`/${lang}${tab.href}`}
-              className={clsx(
-                'group flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 sm:gap-1',
-                'desktopOnly' in tab && tab.desktopOnly && 'hidden md:flex',
-              )}
+              aria-current={isActive ? 'page' : undefined}
+              className="group flex min-h-[48px] min-w-0 flex-1 flex-col items-center justify-center gap-1 active:opacity-60"
             >
               <span className="relative">
                 <tab.icon
-                  size={18}
+                  size={22}
+                  strokeWidth={isActive ? 2.25 : 1.75}
                   className={clsx(
-                    'shrink-0',
-                    isActive ? 'text-sky-400' : 'text-zinc-600'
+                    'shrink-0 transition-colors',
+                    isActive ? 'text-sky-400' : 'text-zinc-500'
                   )}
                 />
                 {tab.id === 'schedule' && scheduleActive && (
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-emerald-400" />
                 )}
               </span>
               <span
                 className={clsx(
-                  'truncate text-[8px] font-bold uppercase leading-tight sm:text-[9px]',
-                  isActive ? 'text-white' : 'text-zinc-600'
+                  'truncate text-[10px] font-medium leading-none',
+                  isActive ? 'text-sky-400' : 'text-zinc-500'
                 )}
               >
                 {i18n._(tab.label)}

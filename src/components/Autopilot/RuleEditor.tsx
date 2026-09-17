@@ -330,23 +330,26 @@ export function RuleEditor({ automation, onClose, onSave, saving }: { automation
 
   return (
     <div className="fixed inset-0 z-[200] flex flex-col bg-zinc-950/95 backdrop-blur-sm ap-console" style={{ animation: 'apFade .15s ease' }}>
-      <div className="flex items-center gap-3 border-b border-zinc-800 px-5 py-3">
-        <button type="button" onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"><Icon.X size={17} /></button>
-        <input value={rule.name} onChange={e => setRule({ ...rule, name: e.target.value })} className="min-w-0 flex-1 max-w-sm bg-transparent text-[16px] font-semibold text-zinc-100 focus:outline-none" />
-        <div className="ml-auto flex items-center gap-3">
+      <div
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-zinc-800 px-3 py-2.5 md:flex-nowrap md:px-5 md:py-3"
+        style={{ paddingTop: 'max(0.625rem, env(safe-area-inset-top, 0px))' }}
+      >
+        <button type="button" onClick={onClose} aria-label="Close" className="grid h-10 w-10 place-items-center rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 md:h-8 md:w-8"><Icon.X size={17} /></button>
+        <input value={rule.name} onChange={e => setRule({ ...rule, name: e.target.value })} className="min-w-0 flex-1 bg-transparent text-[16px] font-semibold text-zinc-100 focus:outline-none md:max-w-sm" />
+        <Button variant="accent" size="md" onClick={() => onSave(rule)} disabled={saving} className="md:order-last">
+          <Icon.Check size={15} />
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+        <div className="flex w-full items-center justify-between gap-3 md:ml-auto md:w-auto md:justify-end">
           <Segmented size="sm" value={rule.side} options={[{ value: 'left', label: 'L' }, { value: 'right', label: 'R' }, { value: 'both', label: 'Both' }]} onChange={v => setRule({ ...rule, side: v })} />
-          <div className="h-5 w-px bg-zinc-800" />
+          <div className="hidden h-5 w-px bg-zinc-800 md:block" />
           <Segmented size="sm" value={rule.mode} options={[{ value: 'dryrun', label: 'Dry-run' }, { value: 'active', label: 'Active' }]} onChange={v => setRule({ ...rule, mode: v, enabled: true })} />
-          <Button variant="ghost" size="md" onClick={onClose}>Cancel</Button>
-          <Button variant="accent" size="md" onClick={() => onSave(rule)} disabled={saving}>
-            <Icon.Check size={15} />
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
+          <span className="hidden md:block"><Button variant="ghost" size="md" onClick={onClose}>Cancel</Button></span>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="w-[44%] min-w-[420px] overflow-y-auto border-r border-zinc-800 p-5">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+        <div className="border-zinc-800 p-3 md:w-[44%] md:min-w-[420px] md:overflow-y-auto md:border-r md:p-5">
           <div className="mx-auto flex max-w-xl flex-col gap-3">
             <WhenEditor rule={rule} set={setRule} />
             <div className="flex justify-center"><Icon.ArrowDown size={16} className="text-zinc-700" /></div>
@@ -356,7 +359,7 @@ export function RuleEditor({ automation, onClose, onSave, saving }: { automation
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-zinc-950/40 p-5">
+        <div className="bg-zinc-950/40 p-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))] md:flex-1 md:overflow-y-auto md:p-5">
           <div className="mx-auto flex max-w-2xl flex-col gap-4">
             {rule.mode === 'dryrun' && (
               <div className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-400">

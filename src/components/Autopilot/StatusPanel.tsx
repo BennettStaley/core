@@ -174,10 +174,10 @@ export function StatusPanel({ globalEnabled, onKill, rules, runs, loading, onDry
   const killed = !globalEnabled
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-4 border-b border-zinc-800 px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3 md:gap-4 md:px-5 md:py-4">
         <div>
-          <h1 className="text-[19px] font-semibold tracking-tight text-zinc-100">Diagnostics</h1>
-          <p className="text-[12px] text-zinc-500 mt-0.5">Live Autopilot state &amp; audit trail</p>
+          <h1 className="hidden text-[19px] font-semibold tracking-tight text-zinc-100 md:block">Diagnostics</h1>
+          <p className="text-[12px] text-zinc-500 md:mt-0.5">Live Autopilot state &amp; audit trail</p>
         </div>
         <div className={`flex items-center gap-3 rounded-xl border px-3.5 py-2 ${killed ? 'border-red-500/40 bg-red-500/10' : 'border-zinc-800 bg-zinc-900/50'}`}>
           <Icon.Power size={16} className={killed ? 'text-red-400' : 'text-zinc-400'} />
@@ -189,7 +189,7 @@ export function StatusPanel({ globalEnabled, onKill, rules, runs, loading, onDry
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-5">
         <div className="mx-auto max-w-6xl">
           {killed && (
             <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-[13px] text-red-300">

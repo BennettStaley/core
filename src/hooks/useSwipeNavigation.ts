@@ -4,7 +4,7 @@ import { useCallback, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 
 /** Ordered screen routes for swipe navigation. */
-const SCREEN_ORDER = ['/', '/schedule', '/data', '/sensors', '/status', '/settings']
+const SCREEN_ORDER = ['/', '/schedule', '/data', '/autopilot', '/more']
 
 /** Minimum horizontal swipe distance in px to trigger navigation. */
 const SWIPE_THRESHOLD = 60
@@ -19,7 +19,7 @@ interface SwipeState {
 }
 
 /**
- * Hook that provides horizontal swipe navigation between the 5 main screens.
+ * Hook that provides horizontal swipe navigation between the 5 tab-bar screens.
  * Returns touch event handlers to attach to the swipeable container.
  *
  * Swipe right → previous screen, swipe left → next screen.

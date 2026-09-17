@@ -13,34 +13,67 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/components/BottomNav/BottomNav.tsx:14
-msgid "Biometrics"
+#: src/components/BottomNav/BottomNav.tsx:20
+msgid "Autopilot"
 msgstr ""
 
-#: src/components/BottomNav/BottomNav.tsx:18
+#: src/components/More/MoreScreen.tsx:37
+msgid "Device, sides, gestures, HomeKit"
+msgstr ""
+
+#: src/components/More/MoreScreen.tsx:62
 msgid "Diagnostics"
 msgstr ""
 
-#: app/[lang]/health/page.tsx:13
-msgid "Hello, tRPC test page!"
+#: src/components/More/MoreScreen.tsx:56
+msgid "Live presence, bed temperature, humidity"
+msgstr ""
+
+#: src/components/BottomNav/BottomNav.tsx:21
+#: src/components/More/MoreScreen.tsx:72
+msgid "More"
 msgstr ""
 
 #: src/components/WifiSignalStrength/WifiSignalStrength.tsx:45
 msgid "Offline"
 msgstr ""
 
-#: src/components/BottomNav/BottomNav.tsx:13
+#: src/components/More/MoreScreen.tsx:30
+msgid "Pod"
+msgstr ""
+
+#: src/components/BottomNav/BottomNav.tsx:18
 msgid "Schedule"
 msgstr ""
 
-#: src/components/BottomNav/BottomNav.tsx:15
+#: src/components/More/MoreScreen.tsx:55
 msgid "Sensors"
 msgstr ""
 
-#: src/components/BottomNav/BottomNav.tsx:16
+#: src/components/More/MoreScreen.tsx:44
+msgid "Service health, updates, logs"
+msgstr ""
+
+#: src/components/More/MoreScreen.tsx:36
+msgid "Settings"
+msgstr ""
+
+#: src/components/BottomNav/BottomNav.tsx:19
+msgid "Sleep"
+msgstr ""
+
+#: src/components/More/MoreScreen.tsx:43
 msgid "Status"
 msgstr ""
 
-#: src/components/BottomNav/BottomNav.tsx:12
-msgid "Temp"
+#: src/components/More/MoreScreen.tsx:63
+msgid "Thermal delivery and scheduler internals"
+msgstr ""
+
+#: src/components/BottomNav/BottomNav.tsx:17
+msgid "Tonight"
+msgstr ""
+
+#: src/components/More/MoreScreen.tsx:49
+msgid "Tools"
 msgstr ""
