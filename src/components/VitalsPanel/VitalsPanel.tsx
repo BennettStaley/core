@@ -3,16 +3,11 @@
 import { useSide } from '@/src/hooks/useSide'
 import { useWeekNavigator } from '@/src/hooks/useWeekNavigator'
 import { trpc } from '@/src/utils/trpc'
-import {
-  Activity,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  Heart,
-  Moon,
-  Wind,
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { SegmentedControl } from '@/src/ui/ios'
+import { ChartCard, METRIC_COLORS, MetricValue, SECONDARY_SERIES_COLOR } from '@/src/components/biometrics/ChartCard'
+import { WeekNavigator } from '@/src/components/WeekNavigator/WeekNavigator'
 import { VitalsChart } from '../VitalsChart/VitalsChart'
 
 // Population zones (40/60/100/140 etc.) intentionally retired for sleep view —
@@ -56,41 +51,36 @@ interface Baseline {
 interface MetricSpec {
   key: 'hr' | 'hrv' | 'br'
   title: string
-  icon: React.ReactNode
   color: string
   unit: string
   zones: Zone[]
   gradientId: string
 }
 
-// Colors: HR is neutral zinc — reserving red for actual alerts rather than the
-// always-present HR line. HRV stays sky (matches existing branding). BR stays
-// green at low chroma so it doesn't compete with HR for attention.
+// One system colour per metric (see ChartCard METRIC_COLORS). Out-of-baseline
+// emphasis is carried by opacity/dots, not by extra hues.
 const METRICS: MetricSpec[] = [
   {
     key: 'hr',
-    title: 'Heart Rate',
-    icon: <Heart size={12} className="text-zinc-300" />,
-    color: '#e4e4e7',
-    unit: 'BPM',
+    title: 'Heart rate',
+    color: METRIC_COLORS.hr,
+    unit: 'bpm',
     zones: NO_ZONES,
     gradientId: 'hr-gradient',
   },
   {
     key: 'hrv',
-    title: 'HRV',
-    icon: <Activity size={12} className="text-sky-400" />,
-    color: '#38bdf8',
+    title: 'Heart rate variability',
+    color: METRIC_COLORS.hrv,
     unit: 'ms',
     zones: NO_ZONES,
     gradientId: 'hrv-gradient',
   },
   {
     key: 'br',
-    title: 'Breathing Rate',
-    icon: <Wind size={12} className="text-green-400" />,
-    color: '#22c55e',
-    unit: 'BPM',
+    title: 'Breathing rate',
+    color: METRIC_COLORS.br,
+    unit: 'br/min',
     zones: NO_ZONES,
     gradientId: 'br-gradient',
   },
@@ -186,18 +176,14 @@ function summarise(values: number[]): { median: number, q1: number, q3: number, 
   }
 }
 
+// Date only: the in-bed span shown beside it would contradict the "time
+// asleep" hero number, which excludes awake time.
 function formatSessionLabel(session: SleepSession): string {
-  const date = session.enteredBedAt.toLocaleDateString('en-US', {
-    weekday: 'short',
+  return session.enteredBedAt.toLocaleDateString('en-US', {
+    weekday: 'long',
     month: 'short',
     day: 'numeric',
   })
-  const end = session.leftBedAt ?? new Date()
-  const durMs = end.getTime() - session.enteredBedAt.getTime()
-  const hours = Math.floor(durMs / 3_600_000)
-  const minutes = Math.floor((durMs % 3_600_000) / 60_000)
-  const duration = `${hours}h ${String(minutes).padStart(2, '0')}m`
-  return `${date} · ${duration}`
 }
 
 function formatClock(date: Date): string {
@@ -210,8 +196,8 @@ function formatNightLabel(date: Date): string {
 
 // Side colors for dual-side comparison
 const SIDE_COLORS = {
-  left: { primary: '#5cb8e0', label: 'Left' },
-  right: { primary: '#40e0d0', label: 'Right' },
+  left: { primary: SECONDARY_SERIES_COLOR, label: 'Left' },
+  right: { primary: SECONDARY_SERIES_COLOR, label: 'Right' },
 } as const
 
 // Minimum session duration that counts as "sleep". The sleep-detector accepts
@@ -236,7 +222,7 @@ interface VitalsPanelProps {
  *    and a personal-baseline band behind the rows (Whoop/Oura convention).
  */
 export function VitalsPanel({ dualSide = false, hideNav = false, hideSummary = false }: VitalsPanelProps) {
-  const { side, toggleSide } = useSide()
+  const { side, setSide } = useSide()
   const week = useWeekNavigator()
   const [view, setView] = useState<'night' | 'week'>('night')
   // Track the user's explicit pick by session ID so the selection survives
@@ -383,128 +369,68 @@ export function VitalsPanel({ dualSide = false, hideNav = false, hideSummary = f
 
   const isLoading = vitalsQuery.isLoading && rawRecords.length === 0
 
+  const VIEW_OPTIONS = [
+    { value: 'night', label: 'Night' },
+    { value: 'week', label: 'Week' },
+  ] as const
+
   return (
     <div className="space-y-3">
-      {/* Week Navigator + View Toggle + Side Toggle */}
       {!hideNav && (
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={week.goToPreviousWeek}
-              className="p-2 text-zinc-500 active:text-white transition-colors"
-              aria-label="Previous week"
-            >
-              <ChevronLeft size={18} />
-            </button>
-
-            <button
-              onClick={week.goToCurrentWeek}
-              className="flex items-center gap-2 rounded-xl bg-zinc-900 px-3 py-2"
-            >
-              <Calendar size={13} className="text-sky-400" />
-              <span className="text-sm font-medium text-white">{week.label}</span>
-            </button>
-
-            <button
-              onClick={week.goToNextWeek}
-              disabled={week.isCurrentWeek}
-              className="p-2 text-zinc-500 active:text-white transition-colors disabled:opacity-30"
-              aria-label="Next week"
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <ViewToggle view={view} onChange={setView} />
-
-            <button
-              onClick={toggleSide}
-              className="flex items-center gap-1.5 rounded-full bg-sky-400/10 px-3 py-1.5"
-            >
-              <span className="text-xs font-semibold text-sky-400 capitalize">{side}</span>
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-sky-400/50 text-[9px] font-bold text-white">
-                {side === 'left' ? 'L' : 'R'}
-              </span>
-            </button>
-          </div>
+        <div className="space-y-2">
+          <WeekNavigator
+            label={week.label}
+            isCurrentWeek={week.isCurrentWeek}
+            onPrevious={week.goToPreviousWeek}
+            onNext={week.goToNextWeek}
+            onToday={week.goToCurrentWeek}
+          />
+          <SegmentedControl
+            aria-label="Side"
+            options={[{ value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }]}
+            value={side}
+            onChange={setSide}
+          />
         </div>
       )}
 
-      {/* Loading state */}
-      {isLoading && (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-zinc-500 text-sm">Loading health data...</div>
-        </div>
-      )}
+      <SegmentedControl aria-label="Vitals range" options={VIEW_OPTIONS} value={view} onChange={setView} />
+
+      {isLoading && <p className="py-10 text-center text-[15px] text-zinc-500">Loading vitals…</p>}
 
       {!isLoading && (
         <>
-          {/* Vitals Summary Card */}
           {!hideSummary && (
-            <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
+            <ChartCard
+              title={view === 'night' ? 'This night' : 'This week'}
+              footnote={trend?.text ?? 'Median values'}
+            >
               {dualSide && (
-                <div className="mb-3 flex items-center justify-center gap-4 text-[10px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-4 rounded-sm" style={{ backgroundColor: SIDE_COLORS[primarySide].primary }} />
-                    <span className="text-zinc-400">
-                      {SIDE_COLORS[primarySide].label}
-                      {' '}
-                      (solid)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-4 rounded-sm border border-dashed" style={{ borderColor: SIDE_COLORS[otherSide].primary }} />
-                    <span className="text-zinc-400">
-                      {SIDE_COLORS[otherSide].label}
-                      {' '}
-                      (dashed)
-                    </span>
-                  </div>
-                </div>
+                <p className="mb-2 text-[13px] leading-[18px] text-zinc-500">
+                  {`${SIDE_COLORS[primarySide].label} solid · ${SIDE_COLORS[otherSide].label} dashed`}
+                </p>
               )}
-
-              <div className="mb-1 text-center text-[10px] uppercase tracking-wider text-zinc-500">
-                {view === 'night' ? 'This night (median)' : 'This week (median)'}
-              </div>
-              <div className="flex items-center justify-around">
+              <div className="grid grid-cols-3 gap-2">
                 <SummaryItem
-                  icon={<Heart size={14} className="text-zinc-300" />}
                   label="Sleeping HR"
                   value={medianStr(hrValues)}
-                  unit="BPM"
+                  unit="bpm"
                   secondaryValue={dualSide ? medianStr(otherHrValues) : undefined}
                 />
                 <SummaryItem
-                  icon={<Activity size={14} className="text-sky-400" />}
                   label="HRV"
                   value={medianStr(hrvValues)}
                   unit="ms"
                   secondaryValue={dualSide ? medianStr(otherHrvValues) : undefined}
                 />
                 <SummaryItem
-                  icon={<Wind size={14} className="text-green-400" />}
                   label="Breathing"
                   value={medianStr(brValues)}
                   unit="br/min"
                   secondaryValue={dualSide ? medianStr(otherBrValues) : undefined}
                 />
               </div>
-
-              {trend && (
-                <div className="mt-2.5 flex items-center justify-center gap-1.5">
-                  {trend.direction === 'up' && <span className="text-green-400 text-[10px]">&#x2197;</span>}
-                  {trend.direction === 'down' && <span className="text-amber-400 text-[10px]">&#x2198;</span>}
-                  <span
-                    className={`text-[11px] ${
-                      trend.direction === 'up' ? 'text-green-400' : 'text-amber-400'
-                    }`}
-                  >
-                    {trend.text}
-                  </span>
-                </div>
-              )}
-            </div>
+            </ChartCard>
           )}
 
           {view === 'night'
@@ -535,11 +461,12 @@ export function VitalsPanel({ dualSide = false, hideNav = false, hideSummary = f
       )}
 
       {vitalsQuery.isError && (
-        <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4 text-center">
-          <p className="text-red-400 text-[13px] sm:text-sm">Failed to load vitals data</p>
+        <div className="rounded-xl bg-zinc-900 px-4 py-3 text-center">
+          <p className="text-[15px] text-red-400">Couldn’t load vitals.</p>
           <button
+            type="button"
             onClick={() => vitalsQuery.refetch()}
-            className="mt-2 text-sky-400 text-xs font-medium"
+            className="min-h-[44px] px-3 text-[17px] text-sky-400 active:opacity-50"
           >
             Retry
           </button>
@@ -551,66 +478,33 @@ export function VitalsPanel({ dualSide = false, hideNav = false, hideSummary = f
 
 // ── Sub-components ──────────────────────────────────────────────────
 
-function ViewToggle({
-  view,
-  onChange,
-}: {
-  view: 'night' | 'week'
-  onChange: (next: 'night' | 'week') => void
-}) {
-  return (
-    <div className="flex items-center rounded-full bg-zinc-900 p-0.5 text-xs">
-      <button
-        onClick={() => onChange('night')}
-        className={`flex items-center gap-1 rounded-full px-2.5 py-1 transition-colors ${
-          view === 'night' ? 'bg-sky-400/20 text-sky-300' : 'text-zinc-500'
-        }`}
-        aria-pressed={view === 'night'}
-      >
-        <Moon size={11} />
-        <span className="font-medium">Night</span>
-      </button>
-      <button
-        onClick={() => onChange('week')}
-        className={`flex items-center gap-1 rounded-full px-2.5 py-1 transition-colors ${
-          view === 'week' ? 'bg-sky-400/20 text-sky-300' : 'text-zinc-500'
-        }`}
-        aria-pressed={view === 'week'}
-      >
-        <Calendar size={11} />
-        <span className="font-medium">Week</span>
-      </button>
-    </div>
-  )
-}
-
 function SummaryItem({
-  icon,
   label,
   value,
   unit,
   secondaryValue,
 }: {
-  icon: React.ReactNode
-  label?: string
+  label: string
   value: string
   unit: string
   secondaryValue?: string
 }) {
   return (
-    <div className="flex flex-col items-center gap-0.5">
-      {icon}
-      <div className="flex items-baseline gap-1">
-        <span className="text-lg font-semibold tabular-nums text-white sm:text-xl">{value}</span>
+    <div className="min-w-0">
+      <p className="ios-numeric truncate">
+        <span className="text-[22px] font-semibold leading-7 text-white">{value}</span>
         {secondaryValue && secondaryValue !== '--' && (
-          <span className="text-xs tabular-nums text-zinc-500">
-            /
+          <span className="text-[15px] text-zinc-500">
+            {' / '}
             {secondaryValue}
           </span>
         )}
-      </div>
-      <span className="text-[10px] text-zinc-500">{unit}</span>
-      {label && <span className="text-[10px] text-zinc-600">{label}</span>}
+        <span className="text-[13px] text-zinc-500">
+          {' '}
+          {unit}
+        </span>
+      </p>
+      <p className="truncate text-[13px] leading-[18px] text-zinc-500">{label}</p>
     </div>
   )
 }
@@ -653,6 +547,21 @@ function filterToWindow(points: DataPoint[], start: number, end: number): DataPo
   })
 }
 
+interface BaselineRow { hrMean: number | null, hrSD: number | null, hrvMean: number | null, hrvSD: number | null, brMean: number | null, brSD: number | null }
+
+function typicalText(mean: number | null, sd: number | null, unit: string): string | undefined {
+  if (mean == null) return undefined
+  return `Typical ${Math.round(mean)}${sd != null ? ` ± ${Math.round(sd)}` : ''} ${unit}`
+}
+
+function EmptyVitals({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl bg-zinc-900 px-4 py-6 text-center">
+      <p className="text-[15px] text-zinc-500">{children}</p>
+    </div>
+  )
+}
+
 function NightView({
   sessions,
   selectedIndex,
@@ -669,18 +578,13 @@ function NightView({
   onSelectIndex: (next: number) => void
   metricSeries: MetricSeries
   otherMetricSeries: MetricSeries | null
-  baseline: { hrMean: number | null, hrSD: number | null, hrvMean: number | null, hrvSD: number | null, brMean: number | null, brSD: number | null } | null
+  baseline: BaselineRow | null
   primaryLabel?: string
   secondaryLabel?: string
   secondaryColor: string
 }) {
   if (sessions.length === 0 || selectedIndex == null) {
-    return (
-      <div className="rounded-2xl bg-zinc-900 p-6 text-center space-y-1.5">
-        <p className="text-zinc-300 text-sm">Nothing to show yet.</p>
-        <p className="text-zinc-500 text-xs">Get some rest — check back tomorrow.</p>
-      </div>
-    )
+    return <EmptyVitals>No vitals recorded this week.</EmptyVitals>
   }
 
   const session = sessions[Math.min(selectedIndex, sessions.length - 1)]
@@ -689,123 +593,97 @@ function NightView({
 
   return (
     <>
-      {/* Session navigator */}
-      <div className="flex items-center justify-between rounded-2xl bg-zinc-900 px-2 py-1.5">
+      {/* Session stepper */}
+      <div className="flex items-center justify-between">
         <button
+          type="button"
           onClick={() => onSelectIndex(Math.max(0, selectedIndex - 1))}
           disabled={selectedIndex === 0}
-          className="p-1.5 text-zinc-500 active:text-white transition-colors disabled:opacity-30"
+          className="-ml-2 flex h-11 w-11 items-center justify-center text-sky-400 active:opacity-50 disabled:text-zinc-700"
           aria-label="Previous session"
         >
-          <ChevronLeft size={16} />
+          <ChevronLeft size={22} strokeWidth={2.25} />
         </button>
-        <div className="flex flex-col items-center">
-          <span className="text-[13px] font-medium text-white">{formatSessionLabel(session)}</span>
-          <span className="text-[10px] text-zinc-500 tabular-nums">
+        <div className="min-w-0 text-center">
+          <p className="ios-numeric truncate text-[15px] font-semibold text-white">{formatSessionLabel(session)}</p>
+          <p className="ios-numeric text-[13px] leading-[18px] text-zinc-500">
             {formatClock(session.enteredBedAt)}
-            {' → '}
+            {' – '}
             {session.leftBedAt ? formatClock(session.leftBedAt) : 'now'}
-          </span>
+          </p>
         </div>
         <button
+          type="button"
           onClick={() => onSelectIndex(Math.min(sessions.length - 1, selectedIndex + 1))}
           disabled={selectedIndex >= sessions.length - 1}
-          className="p-1.5 text-zinc-500 active:text-white transition-colors disabled:opacity-30"
+          className="-mr-2 flex h-11 w-11 items-center justify-center text-sky-400 active:opacity-50 disabled:text-zinc-700"
           aria-label="Next session"
         >
-          <ChevronRight size={16} />
+          <ChevronRight size={22} strokeWidth={2.25} />
         </button>
       </div>
 
-      {/* Stacked HR / HRV / BR panels sharing the session's clock-time axis */}
-      <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4 space-y-2">
-        {METRICS.map((metric) => {
-          if (metric.key === 'hrv') {
-            const primary = filterToWindow(metricSeries.hrv, start, end)
-            const secondary = otherMetricSeries ? filterToWindow(otherMetricSeries.hrv, start, end) : []
-            const { mean, sd } = metricBaseline('hrv', baseline)
-            return (
-              <HrvNightBlock
-                key="hrv"
-                metric={metric}
-                primary={primary}
-                secondary={secondary}
-                baselineMean={mean}
-                baselineSD={sd}
-                sessionStart={start}
-                sessionEnd={end}
-                primaryLabel={primaryLabel}
-                secondaryLabel={secondaryLabel}
-                secondaryColor={secondaryColor}
-              />
-            )
-          }
-
-          const primary = filterToWindow(metricSeries[metric.key], start, end)
-          const secondary = otherMetricSeries ? filterToWindow(otherMetricSeries[metric.key], start, end) : []
-          const { mean, sd } = metricBaseline(metric.key, baseline)
-          const baselineMin = mean != null && sd != null ? mean - sd : undefined
-          const baselineMax = mean != null && sd != null ? mean + sd : undefined
-
+      {/* HR / HRV / BR share the session's clock-time axis */}
+      {METRICS.map((metric) => {
+        if (metric.key === 'hrv') {
+          const primary = filterToWindow(metricSeries.hrv, start, end)
+          const secondary = otherMetricSeries ? filterToWindow(otherMetricSeries.hrv, start, end) : []
+          const { mean, sd } = metricBaseline('hrv', baseline)
           return (
-            <div key={metric.key}>
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1.5">
-                  {metric.icon}
-                  <span className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
-                    {metric.title}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-[11px] tabular-nums">
-                  {mean != null && (
-                    <span className="text-zinc-500">
-                      typical
-                      {' '}
-                      <span style={{ color: metric.color }}>{Math.round(mean)}</span>
-                      {sd != null && (
-                        <span className="text-zinc-600">
-                          {' '}
-                          ±
-                          {Math.round(sd)}
-                        </span>
-                      )}
-                    </span>
-                  )}
-                  {primary.length > 0 && (
-                    <span style={{ color: metric.color }} className="font-medium">
-                      {Math.round(median(primary.map(p => p.value)) ?? 0)}
-                      {' '}
-                      {metric.unit}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <VitalsChart
-                data={primary}
-                color={metric.color}
-                gradientId={`${metric.gradientId}-night`}
-                zones={metric.zones}
-                unit={metric.unit}
-                height={120}
-                label={primaryLabel}
-                xMin={start}
-                xMax={end}
-                baselineMin={baselineMin}
-                baselineMax={baselineMax}
-                compact
-                secondary={secondary.length > 0
-                  ? {
-                      data: secondary,
-                      color: secondaryColor,
-                      gradientId: `${metric.gradientId}-night-other`,
-                      label: secondaryLabel ?? '',
-                    }
-                  : undefined}
-              />
-            </div>
+            <HrvNightBlock
+              key="hrv"
+              metric={metric}
+              primary={primary}
+              secondary={secondary}
+              baselineMean={mean}
+              baselineSD={sd}
+              sessionStart={start}
+              sessionEnd={end}
+              primaryLabel={primaryLabel}
+              secondaryLabel={secondaryLabel}
+            />
           )
-        })}
-      </div>
+        }
+
+        const primary = filterToWindow(metricSeries[metric.key], start, end)
+        const secondary = otherMetricSeries ? filterToWindow(otherMetricSeries[metric.key], start, end) : []
+        const { mean, sd } = metricBaseline(metric.key, baseline)
+        const baselineMin = mean != null && sd != null ? mean - sd : undefined
+        const baselineMax = mean != null && sd != null ? mean + sd : undefined
+        const nightMedian = median(primary.map(p => p.value))
+
+        return (
+          <ChartCard
+            key={metric.key}
+            title={metric.title}
+            trailing={nightMedian != null ? <MetricValue value={Math.round(nightMedian)} unit={metric.unit} /> : undefined}
+            footnote={typicalText(mean, sd, metric.unit)}
+          >
+            <VitalsChart
+              data={primary}
+              color={metric.color}
+              gradientId={`${metric.gradientId}-night`}
+              zones={metric.zones}
+              unit={metric.unit}
+              height={120}
+              label={primaryLabel}
+              xMin={start}
+              xMax={end}
+              baselineMin={baselineMin}
+              baselineMax={baselineMax}
+              compact
+              secondary={secondary.length > 0
+                ? {
+                    data: secondary,
+                    color: secondaryColor,
+                    gradientId: `${metric.gradientId}-night-other`,
+                    label: secondaryLabel ?? '',
+                  }
+                : undefined}
+            />
+          </ChartCard>
+        )
+      })}
     </>
   )
 }
@@ -813,7 +691,7 @@ function NightView({
 /**
  * HRV night block. Replaces the misleading high-frequency HRV line: shows one
  * overnight median (the number every consumer sleep product hero's), a
- * vs-baseline delta chip, and 30-min binned bars so within-night variation is
+ * vs-baseline delta, and 30-min binned bars so within-night variation is
  * legible without inviting moment-to-moment interpretation.
  */
 function HrvNightBlock({
@@ -826,7 +704,6 @@ function HrvNightBlock({
   sessionEnd,
   primaryLabel,
   secondaryLabel,
-  secondaryColor,
 }: {
   metric: MetricSpec
   primary: DataPoint[]
@@ -837,28 +714,14 @@ function HrvNightBlock({
   sessionEnd: number
   primaryLabel?: string
   secondaryLabel?: string
-  secondaryColor: string
 }) {
   const overnightMedian = median(primary.map(p => p.value))
   const secondaryMedian = median(secondary.map(p => p.value))
 
-  const z
-    = overnightMedian != null && baselineMean != null && baselineSD != null && baselineSD > 0
-      ? (overnightMedian - baselineMean) / baselineSD
-      : null
   const deltaPct
     = overnightMedian != null && baselineMean != null && baselineMean > 0
       ? Math.round(((overnightMedian - baselineMean) / baselineMean) * 100)
       : null
-
-  const deltaTone
-    = z == null
-      ? 'text-zinc-500'
-      : z > 1
-        ? 'text-green-400'
-        : z < -1
-          ? 'text-amber-400'
-          : 'text-zinc-400'
 
   const binMs = 30 * 60 * 1000
   const bins: { t: number, value: number }[] = []
@@ -871,87 +734,44 @@ function HrvNightBlock({
   const bandHi = baselineMean != null && baselineSD != null ? baselineMean + baselineSD : null
   const inBand = (v: number) => bandLo == null || bandHi == null || (v >= bandLo && v <= bandHi)
 
-  const maxBinValue = Math.max(
-    1,
-    ...bins.map(b => b.value),
-    baselineMean != null && baselineSD != null ? baselineMean + baselineSD : 0,
-  )
+  const maxBinValue = Math.max(1, ...bins.map(b => b.value), bandHi ?? 0)
+
+  const footnoteParts = [
+    deltaPct != null ? `${deltaPct >= 0 ? '+' : ''}${deltaPct}% vs typical` : null,
+    typicalText(baselineMean, baselineSD, 'ms'),
+    secondaryMedian != null ? `${secondaryLabel ?? 'Other side'} ${Math.round(secondaryMedian)} ms` : null,
+  ].filter(Boolean)
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-1.5">
-          {metric.icon}
-          <span className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
-            {metric.title}
-          </span>
-        </div>
-        {baselineMean != null && (
-          <span className="text-[11px] text-zinc-500 tabular-nums">
-            typical
-            {' '}
-            <span style={{ color: metric.color }}>{Math.round(baselineMean)}</span>
-            {baselineSD != null && (
-              <span className="text-zinc-600">
-                {' '}
-                ±
-                {Math.round(baselineSD)}
-              </span>
-            )}
-            <span className="text-zinc-600 ml-1">ms</span>
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-baseline gap-3 mb-2">
-        <div>
-          {primaryLabel && (
-            <span className="text-[10px] text-zinc-500 mr-1.5">{primaryLabel}</span>
-          )}
-          <span style={{ color: metric.color }} className="text-2xl font-semibold tabular-nums">
-            {overnightMedian != null ? Math.round(overnightMedian) : '--'}
-          </span>
-          <span className="text-zinc-500 text-xs ml-1">ms</span>
-          {deltaPct != null && (
-            <span className={`text-[11px] ml-2 tabular-nums ${deltaTone}`}>
-              {deltaPct >= 0 ? '+' : ''}
-              {deltaPct}
-              % vs baseline
-            </span>
-          )}
-        </div>
-        {secondaryMedian != null && (
-          <div className="text-[11px] text-zinc-500">
-            <span className="mr-1">{secondaryLabel ?? 'Other'}</span>
-            <span style={{ color: secondaryColor }} className="font-medium tabular-nums">
-              {Math.round(secondaryMedian)}
-            </span>
-            <span className="ml-0.5">ms</span>
-          </div>
-        )}
-      </div>
-
-      {bins.length > 0 && (
-        <div className="flex items-end gap-0.5 h-8" aria-label="30-minute HRV bins">
-          {bins.map((b) => {
-            const h = Math.max(2, (b.value / maxBinValue) * 32)
-            const ok = inBand(b.value)
-            return (
-              <div
-                key={b.t}
-                className="flex-1 rounded-sm"
-                style={{
-                  height: `${h}px`,
-                  backgroundColor: metric.color,
-                  opacity: ok ? 0.45 : 0.9,
-                }}
-                title={`${new Date(b.t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} — ${Math.round(b.value)} ms`}
-              />
-            )
-          })}
-        </div>
+    <ChartCard
+      title={metric.title}
+      trailing={(
+        <>
+          {primaryLabel && <span className="mr-1.5">{primaryLabel}</span>}
+          <MetricValue value={overnightMedian != null ? Math.round(overnightMedian) : '--'} unit="ms" />
+        </>
       )}
-    </div>
+      footnote={footnoteParts.length > 0 ? footnoteParts.join(' · ') : undefined}
+    >
+      {bins.length > 0
+        ? (
+            <div className="flex h-14 items-end gap-0.5" aria-label="30-minute HRV medians">
+              {bins.map(b => (
+                <div
+                  key={b.t}
+                  className="flex-1 rounded-t-[2px]"
+                  style={{
+                    height: `${Math.max(2, (b.value / maxBinValue) * 56)}px`,
+                    backgroundColor: metric.color,
+                    opacity: inBand(b.value) ? 0.45 : 1,
+                  }}
+                  title={`${new Date(b.t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} — ${Math.round(b.value)} ms`}
+                />
+              ))}
+            </div>
+          )
+        : <p className="py-4 text-center text-[15px] text-zinc-500">No HRV for this night.</p>}
+    </ChartCard>
   )
 }
 
@@ -1004,17 +824,12 @@ function WeekView({
   sortedRecords: VitalsRecord[]
   otherSortedRecords: VitalsRecord[] | null
   sessions: SleepSession[]
-  baseline: { hrMean: number | null, hrSD: number | null, hrvMean: number | null, hrvSD: number | null, brMean: number | null, brSD: number | null } | null
+  baseline: BaselineRow | null
   primaryLabel?: string
   secondaryLabel?: string
 }) {
   if (sessions.length === 0) {
-    return (
-      <div className="rounded-2xl bg-zinc-900 p-6 text-center space-y-1.5">
-        <p className="text-zinc-300 text-sm">Nothing to show yet.</p>
-        <p className="text-zinc-500 text-xs">Get some rest — check back tomorrow.</p>
-      </div>
-    )
+    return <EmptyVitals>No vitals recorded this week.</EmptyVitals>
   }
 
   return (
@@ -1060,15 +875,9 @@ function WeekMetricCard({
   const allStats = [...primaryStats, ...secondaryStats]
   if (allStats.length === 0) {
     return (
-      <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-        <div className="flex items-center gap-1.5 mb-2">
-          {metric.icon}
-          <span className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
-            {metric.title}
-          </span>
-        </div>
-        <p className="text-center text-zinc-500 text-xs py-6">No data this week</p>
-      </div>
+      <ChartCard title={metric.title}>
+        <p className="py-4 text-center text-[15px] text-zinc-500">No data this week.</p>
+      </ChartCard>
     )
   }
 
@@ -1085,54 +894,33 @@ function WeekMetricCard({
   domainHi += range * 0.08
 
   const scale = (v: number) => ((v - domainLo) / (domainHi - domainLo)) * 100 // %
+  const typical = typicalText(baselineMean, baselineSD, metric.unit)
 
   return (
-    <div className="rounded-2xl bg-zinc-900 p-3 sm:p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5">
-          {metric.icon}
-          <span className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">
-            {metric.title}
-          </span>
-        </div>
-        {baselineMean != null && (
-          <span className="text-[10px] text-zinc-500 tabular-nums">
-            baseline
-            {' '}
-            <span style={{ color: metric.color }}>{Math.round(baselineMean)}</span>
-            {baselineSD != null && (
-              <span className="text-zinc-600">
-                {' '}
-                ±
-                {Math.round(baselineSD)}
-              </span>
-            )}
-            <span className="text-zinc-600 ml-1">{metric.unit}</span>
-          </span>
-        )}
+    <ChartCard
+      title={metric.title}
+      footnote={typical ? `Nightly median · ${typical}` : 'Nightly median'}
+    >
+      <div className="[&>*+*]:border-t [&>*+*]:border-zinc-800">
+        {primaryStats.map((stat, idx) => {
+          const otherStat = secondaryStats.find(s => s.date.getTime() === stat.date.getTime())
+          return (
+            <NightSummaryRow
+              key={idx}
+              stat={stat}
+              otherStat={otherStat ?? null}
+              color={metric.color}
+              primaryLabel={primaryLabel}
+              secondaryLabel={secondaryLabel}
+              baselineMean={baselineMean}
+              baselineSD={baselineSD}
+              scale={scale}
+              unit={metric.unit}
+            />
+          )
+        })}
       </div>
-
-      {primaryStats.map((stat, idx) => {
-        const otherStat = secondaryStats.find(s => s.date.getTime() === stat.date.getTime())
-        return (
-          <NightSummaryRow
-            key={idx}
-            stat={stat}
-            otherStat={otherStat ?? null}
-            color={metric.color}
-            secondaryColor="#a78bfa"
-            primaryLabel={primaryLabel}
-            secondaryLabel={secondaryLabel}
-            baselineMean={baselineMean}
-            baselineSD={baselineSD}
-            scale={scale}
-            domainLo={domainLo}
-            domainHi={domainHi}
-            unit={metric.unit}
-          />
-        )
-      })}
-    </div>
+    </ChartCard>
   )
 }
 
@@ -1140,27 +928,21 @@ function NightSummaryRow({
   stat,
   otherStat,
   color,
-  secondaryColor,
   primaryLabel,
   secondaryLabel,
   baselineMean,
   baselineSD,
   scale,
-  domainLo,
-  domainHi,
   unit,
 }: {
   stat: NightStat
   otherStat: NightStat | null
   color: string
-  secondaryColor: string
   primaryLabel?: string
   secondaryLabel?: string
   baselineMean: number | null
   baselineSD: number | null
   scale: (v: number) => number
-  domainLo: number
-  domainHi: number
   unit: string
 }) {
   const outsideBand
@@ -1172,62 +954,54 @@ function NightSummaryRow({
   const bandEnd = baselineMean != null && baselineSD != null ? scale(baselineMean + baselineSD) : null
 
   return (
-    <div className="grid grid-cols-[64px_1fr_56px] items-center gap-2 py-1.5 border-t border-zinc-800 first:border-t-0">
-      <span className="text-[11px] text-zinc-400 tabular-nums">
+    <div className="grid min-h-[36px] grid-cols-[84px_1fr_36px] items-center gap-2">
+      <span className="ios-numeric text-[13px] text-zinc-500">
         {formatNightLabel(stat.date)}
       </span>
       <div className="relative h-5">
         {/* Baseline band */}
         {bandStart != null && bandEnd != null && (
           <div
-            className="absolute top-1 bottom-1 rounded-sm"
+            className="absolute inset-y-0.5 rounded-sm"
             style={{
               left: `${bandStart}%`,
               width: `${Math.max(0, bandEnd - bandStart)}%`,
               backgroundColor: color,
-              opacity: 0.1,
+              opacity: 0.12,
             }}
           />
         )}
         {/* IQR bar */}
         <div
-          className="absolute top-2 bottom-2 rounded-full"
+          className="absolute top-[8px] h-1 rounded-full"
           style={{
             left: `${scale(stat.q1)}%`,
             width: `${Math.max(2, scale(stat.q3) - scale(stat.q1))}%`,
             backgroundColor: color,
-            opacity: 0.35,
+            opacity: 0.4,
           }}
           title={`${primaryLabel ?? 'IQR'}: ${Math.round(stat.q1)}–${Math.round(stat.q3)} ${unit}`}
         />
         {/* Primary median dot */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-2.5 w-2.5 rounded-full ring-2 ring-zinc-900"
+          className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-zinc-900"
           style={{
             left: `${scale(stat.median)}%`,
-            backgroundColor: outsideBand ? color : '#a1a1aa',
+            backgroundColor: outsideBand ? color : '#8E8E93',
           }}
           title={`${primaryLabel ?? 'Median'}: ${Math.round(stat.median)} ${unit}`}
         />
         {/* Secondary (other-side) median */}
         {otherStat && (
           <div
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-2 w-2 rounded-full ring-1 ring-zinc-900"
-            style={{
-              left: `${scale(otherStat.median)}%`,
-              backgroundColor: secondaryColor,
-            }}
+            className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white ring-1 ring-zinc-900"
+            style={{ left: `${scale(otherStat.median)}%` }}
             title={`${secondaryLabel ?? 'Other'}: ${Math.round(otherStat.median)} ${unit}`}
           />
         )}
       </div>
-      <span className="text-[11px] tabular-nums text-right" style={{ color: outsideBand ? color : '#a1a1aa' }}>
+      <span className="ios-numeric text-right text-[15px] text-white">
         {Math.round(stat.median)}
-      </span>
-      {/* Silence unused lint warnings for derived bounds the row consumes via scale */}
-      <span className="hidden">
-        {domainLo}
-        {domainHi}
       </span>
     </div>
   )

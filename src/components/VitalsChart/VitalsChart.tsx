@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { CHART_AXIS, CHART_FONT_SIZE, CHART_GRID } from '@/src/components/biometrics/ChartCard'
 
 interface DataPoint {
   timestamp: Date
@@ -52,7 +53,7 @@ interface VitalsChartProps {
 }
 
 const PADDING = { top: 8, right: 8, bottom: 24, left: 36 }
-const COMPACT_PADDING = { top: 6, right: 4, bottom: 20, left: 22 }
+const COMPACT_PADDING = { top: 6, right: 2, bottom: 24, left: 28 }
 // Break the line on absolute gap > 5 min. Relative thresholds (e.g. 3× median)
 // fragment sparse-but-legitimate early-night periods into disconnected stubs;
 // 5 min is the natural off-bed / dropout boundary at the pod's sampling cadence.
@@ -316,8 +317,8 @@ export function VitalsChart({
 
   if (sorted.length === 0 && sortedSecondary.length === 0) {
     return (
-      <div className="flex items-center justify-center text-zinc-500 text-sm" style={{ height }}>
-        No data available
+      <div className="flex items-center justify-center text-[15px] text-zinc-500" style={{ height }}>
+        No data for this night
       </div>
     )
   }
@@ -326,8 +327,8 @@ export function VitalsChart({
     <div ref={measureRef} className="w-full">
       {/* Selected value display */}
       {selectedPoint && (
-        <div className="flex justify-end mb-1 gap-3">
-          <div className="text-xs">
+        <div className="ios-numeric mb-1 flex justify-end gap-3">
+          <div className="text-[13px]">
             {label && (
               <span className="text-zinc-500 mr-1">
                 {label}
@@ -344,7 +345,7 @@ export function VitalsChart({
             </span>
           </div>
           {secondary && selectedSecondaryPoint && (
-            <div className="text-xs">
+            <div className="text-[13px]">
               <span className="text-zinc-500 mr-1">
                 {secondary.label}
                 :
@@ -370,13 +371,13 @@ export function VitalsChart({
       >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.28" />
-            <stop offset="100%" stopColor={color} stopOpacity="0.04" />
+            <stop offset="0%" stopColor={color} stopOpacity="0.15" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
           {secondary && (
             <linearGradient id={secondary.gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={secondary.color} stopOpacity="0.18" />
-              <stop offset="100%" stopColor={secondary.color} stopOpacity="0.04" />
+              <stop offset="0%" stopColor={secondary.color} stopOpacity="0.08" />
+              <stop offset="100%" stopColor={secondary.color} stopOpacity="0" />
             </linearGradient>
           )}
         </defs>
@@ -391,7 +392,7 @@ export function VitalsChart({
               width={chartWidth}
               height={Math.max(0, scaleY(baselineMin) - scaleY(baselineMax))}
               fill={color}
-              opacity="0.15"
+              opacity="0.08"
             />
             <line
               x1={padding.left}
@@ -399,9 +400,8 @@ export function VitalsChart({
               x2={padding.left + chartWidth}
               y2={scaleY(baselineMax)}
               stroke={color}
-              strokeWidth="0.5"
-              strokeDasharray="3,3"
-              opacity="0.4"
+              strokeWidth="1"
+              opacity="0.25"
             />
             <line
               x1={padding.left}
@@ -409,9 +409,8 @@ export function VitalsChart({
               x2={padding.left + chartWidth}
               y2={scaleY(baselineMin)}
               stroke={color}
-              strokeWidth="0.5"
-              strokeDasharray="3,3"
-              opacity="0.4"
+              strokeWidth="1"
+              opacity="0.25"
             />
           </>
         )}
@@ -440,15 +439,15 @@ export function VitalsChart({
               y1={tick.y}
               x2={padding.left + chartWidth}
               y2={tick.y}
-              stroke="rgb(63 63 70)" /* zinc-700 */
-              strokeWidth="0.5"
+              stroke={CHART_GRID}
+              strokeWidth="1"
             />
             <text
               x={padding.left - 6}
               y={tick.y + 3}
               textAnchor="end"
-              fill="rgb(113 113 122)" /* zinc-500 */
-              fontSize="11"
+              fill={CHART_AXIS}
+              fontSize={CHART_FONT_SIZE}
             >
               {tick.label}
             </text>
@@ -466,7 +465,7 @@ export function VitalsChart({
             d={linePath}
             fill="none"
             stroke={color}
-            strokeWidth="2"
+            strokeWidth="1.75"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -528,9 +527,10 @@ export function VitalsChart({
             key={i}
             x={tick.x}
             y={height - 4}
-            textAnchor="middle"
-            fill="rgb(113 113 122)" /* zinc-500 */
-            fontSize="11"
+            // Pin the outer labels inside the plot so they never clip at the SVG edge.
+            textAnchor={i === 0 ? 'start' : i === xTicks.length - 1 ? 'end' : 'middle'}
+            fill={CHART_AXIS}
+            fontSize={CHART_FONT_SIZE}
           >
             {tick.label}
           </text>

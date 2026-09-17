@@ -1,114 +1,133 @@
 'use client'
 
-import { Moon } from 'lucide-react'
-import type { SleepRecord } from './types'
+import { trpc } from '@/src/utils/trpc'
+import type { Side, SleepRecord } from './types'
 import { SleepRecordActions } from './SleepRecordActions'
 
 interface SleepSummaryCardProps {
+  side: Side
+  /** Sleep records for the visible week, most recent first. */
   records: SleepRecord[]
+  /** Prefix the caption with the side name (dual-side view). */
+  showSideName?: boolean
 }
 
-function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
+function durationParts(seconds: number): { hours: number, minutes: number } {
+  // Round to the nearest minute so this agrees with formatDurationHM elsewhere on the screen.
+  const totalMinutes = Math.round(seconds / 60)
+  return { hours: Math.floor(totalMinutes / 60), minutes: totalMinutes % 60 }
+}
+
+export function formatDuration(seconds: number): string {
+  const { hours, minutes } = durationParts(seconds)
   if (hours === 0) return `${minutes}m`
   return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
 }
 
 function formatTime(date: Date): string {
-  return new Date(date).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
+  return new Date(date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
 }
 
-function formatDate(date: Date): string {
-  return new Date(date).toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })
+function isSameLocalDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+/** "Last night" when the record ended today, otherwise the bedtime date. */
+export function nightCaption(record: Pick<SleepRecord, 'enteredBedAt' | 'leftBedAt'>): string {
+  if (isSameLocalDay(new Date(record.leftBedAt), new Date())) return 'Last night'
+  return new Date(record.enteredBedAt).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 }
 
 /**
- * Sleep summary card matching iOS SleepSummaryCardView.
- * Shows bedtime, wake time, duration, and bed exits for the most recent record.
+ * "Last night" hero card, Health-style: time asleep as a large number,
+ * bedtime → wake, and the night's sleeping vitals in one row.
  */
-export function SleepSummaryCard({ records }: SleepSummaryCardProps) {
-  if (!records || records.length === 0) {
+export function SleepSummaryCard({ side, records, showSideName = false }: SleepSummaryCardProps) {
+  const record = records[0]
+
+  const summaryQuery = trpc.biometrics.getVitalsSummary.useQuery(
+    {
+      side,
+      startDate: record ? new Date(record.enteredBedAt) : undefined,
+      endDate: record ? new Date(record.leftBedAt) : undefined,
+    },
+    { enabled: Boolean(record) },
+  )
+
+  if (!record) {
     return (
-      <div className="rounded-2xl bg-zinc-900/80 p-3 sm:p-4">
-        <div className="flex items-center gap-2 text-zinc-500">
-          <Moon size={16} />
-          <span className="text-xs font-medium uppercase tracking-wider">Sleep Summary</span>
-        </div>
-        <p className="mt-3 text-sm text-zinc-600">No sleep data for this week</p>
-      </div>
+      <section className="rounded-xl bg-zinc-900 px-4 py-3">
+        <p className="text-[13px] leading-[18px] text-zinc-500">{showSideName ? `${side === 'left' ? 'Left' : 'Right'} side` : 'This week'}</p>
+        <p className="mt-0.5 text-[15px] text-zinc-400">No sleep recorded this week.</p>
+      </section>
     )
   }
 
-  // Show most recent record (first since ordered DESC)
-  const record = records[0]
-  const avgDuration
-    = records.reduce((sum, r) => sum + r.sleepDurationSeconds, 0) / records.length
+  const summary = summaryQuery.data
+  const { hours, minutes } = durationParts(record.sleepDurationSeconds)
+  const avgDuration = records.reduce((sum, r) => sum + r.sleepDurationSeconds, 0) / records.length
+  const round = (v: number | null | undefined) => (v != null ? String(Math.round(v)) : '–')
+  const caption = showSideName ? `${side === 'left' ? 'Left' : 'Right'} side` : 'Time asleep'
 
   return (
-    <div className="rounded-2xl bg-zinc-900/80 p-3 sm:p-4">
-      {/* Header */}
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Moon size={16} className="text-sky-400" />
-          <span className="text-xs font-medium uppercase tracking-wider text-zinc-400">
-            Sleep Summary
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">{formatDate(record.enteredBedAt)}</span>
-          {/* Edit / Delete actions for the most recent record */}
+    <section className="rounded-xl bg-zinc-900">
+      <div className="px-4 pb-3 pt-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="truncate text-[15px] font-semibold text-zinc-500">{caption}</p>
           <SleepRecordActions
             recordId={record.id}
             enteredBedAt={record.enteredBedAt}
             leftBedAt={record.leftBedAt}
           />
         </div>
+
+        <p className="ios-numeric mt-0.5 text-white" aria-label={`Time asleep ${formatDuration(record.sleepDurationSeconds)}`}>
+          {hours > 0 && (
+            <>
+              <span className="text-[34px] font-bold leading-[41px]">{hours}</span>
+              <span className="mr-1.5 text-[20px] font-semibold text-zinc-500">h</span>
+            </>
+          )}
+          <span className="text-[34px] font-bold leading-[41px]">{minutes}</span>
+          <span className="text-[20px] font-semibold text-zinc-500">m</span>
+        </p>
+        <p className="ios-numeric text-[15px] text-zinc-500">
+          {formatTime(record.enteredBedAt)}
+          {' – '}
+          {formatTime(record.leftBedAt)}
+          {record.timesExitedBed > 0 && ` · ${record.timesExitedBed} ${record.timesExitedBed === 1 ? 'exit' : 'exits'}`}
+        </p>
       </div>
 
-      {/* 2x2 grid of metrics */}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <p className="text-[11px] text-zinc-500">Bedtime</p>
-          <p className="text-sm font-medium text-zinc-200">{formatTime(record.enteredBedAt)}</p>
-        </div>
-        <div>
-          <p className="text-[11px] text-zinc-500">Wake Time</p>
-          <p className="text-sm font-medium text-zinc-200">{formatTime(record.leftBedAt)}</p>
-        </div>
-        <div>
-          <p className="text-[11px] text-zinc-500">Duration</p>
-          <p className="text-sm font-medium text-zinc-200">
-            {formatDuration(record.sleepDurationSeconds)}
-          </p>
-        </div>
-        <div>
-          <p className="text-[11px] text-zinc-500">Exits</p>
-          <p className="text-sm font-medium text-zinc-200">{record.timesExitedBed}</p>
-        </div>
+      <div className="grid grid-cols-3 border-t border-zinc-800 px-4 py-3">
+        <Stat label="Sleeping HR" value={round(summary?.avgHeartRate)} unit="bpm" />
+        <Stat label="HRV" value={round(summary?.avgHRV)} unit="ms" />
+        <Stat label="Breathing" value={round(summary?.avgBreathingRate)} unit="br/min" />
       </div>
 
-      {/* Weekly average */}
       {records.length > 1 && (
-        <div className="mt-3 border-t border-zinc-800 pt-3">
-          <p className="text-[11px] text-zinc-500">
-            Weekly Avg (
-            {records.length}
-            {' '}
-            nights) ·
-            {' '}
-            <span className="text-zinc-300">{formatDuration(Math.round(avgDuration))}</span>
-          </p>
-        </div>
+        <p className="ios-numeric border-t border-zinc-800 px-4 py-2.5 text-[13px] leading-[18px] text-zinc-500">
+          Average this week
+          {' '}
+          <span className="text-white">{formatDuration(Math.round(avgDuration))}</span>
+          {` · ${records.length} nights`}
+        </p>
       )}
+    </section>
+  )
+}
+
+function Stat({ label, value, unit }: { label: string, value: string, unit: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="ios-numeric truncate">
+        <span className="text-[22px] font-semibold leading-7 text-white">{value}</span>
+        <span className="text-[13px] text-zinc-500">
+          {' '}
+          {unit}
+        </span>
+      </p>
+      <p className="truncate text-[13px] leading-[18px] text-zinc-500">{label}</p>
     </div>
   )
 }

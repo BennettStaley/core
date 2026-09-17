@@ -1,6 +1,6 @@
 'use client'
 
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface WeekNavigatorProps {
   label: string
@@ -11,8 +11,8 @@ interface WeekNavigatorProps {
 }
 
 /**
- * Week-based date range selector matching iOS WeekNavigatorView.
- * Displays the current week range with prev/next navigation.
+ * iOS-style date range stepper: plain chevron buttons flanking the range label.
+ * Tapping the label jumps back to the current week.
  */
 export function WeekNavigator({
   label,
@@ -24,29 +24,33 @@ export function WeekNavigator({
   return (
     <div className="flex items-center justify-between">
       <button
+        type="button"
         onClick={onPrevious}
-        className="flex h-11 w-11 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 active:bg-zinc-700"
+        className="-ml-2 flex h-11 w-11 items-center justify-center text-sky-400 active:opacity-50"
         aria-label="Previous week"
       >
-        <ChevronLeft size={18} />
+        <ChevronLeft size={24} strokeWidth={2.25} />
       </button>
 
       <button
+        type="button"
         onClick={onToday}
-        className="flex min-h-[44px] items-center gap-2 rounded-xl bg-zinc-800/80 px-3 py-2 sm:px-4 sm:py-2.5 active:bg-zinc-700"
+        disabled={isCurrentWeek}
+        className="flex min-h-[44px] flex-col items-center justify-center px-3 active:opacity-50 disabled:active:opacity-100"
         aria-label="Go to current week"
       >
-        <Calendar size={14} className="text-sky-400" />
-        <span className="text-[13px] font-medium text-white sm:text-sm">{label}</span>
+        <span className="ios-numeric text-[17px] font-semibold text-white">{label}</span>
+        {!isCurrentWeek && <span className="text-[13px] leading-4 text-sky-400">This week</span>}
       </button>
 
       <button
+        type="button"
         onClick={onNext}
         disabled={isCurrentWeek}
-        className="flex h-11 w-11 items-center justify-center rounded-lg bg-zinc-800/80 text-zinc-400 active:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed"
+        className="-mr-2 flex h-11 w-11 items-center justify-center text-sky-400 active:opacity-50 disabled:text-zinc-700"
         aria-label="Next week"
       >
-        <ChevronRight size={18} />
+        <ChevronRight size={24} strokeWidth={2.25} />
       </button>
     </div>
   )

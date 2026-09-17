@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { Loader2 } from 'lucide-react'
 import { trpc } from '@/src/utils/trpc'
-import { Pencil, Trash2, X, Loader2, Check } from 'lucide-react'
+import { ListRow, ListSection, Sheet } from '@/src/ui/ios'
 
 interface SleepRecordActionsProps {
   recordId: number
@@ -13,14 +14,12 @@ interface SleepRecordActionsProps {
 
 function formatDateTimeLocal(date: Date): string {
   const d = new Date(date)
-  // Format to datetime-local input value
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 /**
- * Inline actions for editing/deleting a sleep record.
- * Matches iOS sleep record management functionality.
+ * "Edit" bar button that opens a sheet for adjusting or deleting a sleep record.
  *
  * Wires into:
  * - biometrics.updateSleepRecord → edit bed/wake times
@@ -32,29 +31,33 @@ export function SleepRecordActions({
   leftBedAt,
   onActionComplete,
 }: SleepRecordActionsProps) {
-  const [mode, setMode] = useState<'idle' | 'edit' | 'confirmDelete'>('idle')
+  const [open, setOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [editBedTime, setEditBedTime] = useState(formatDateTimeLocal(enteredBedAt))
   const [editWakeTime, setEditWakeTime] = useState(formatDateTimeLocal(leftBedAt))
 
   const utils = trpc.useUtils()
 
-  const updateMutation = trpc.biometrics.updateSleepRecord.useMutation({
-    onSuccess: () => {
-      utils.biometrics.getSleepRecords.invalidate()
-      utils.biometrics.getLatestSleep.invalidate()
-      setMode('idle')
-      onActionComplete?.()
-    },
-  })
+  const close = useCallback(() => {
+    setOpen(false)
+    setConfirmDelete(false)
+  }, [])
 
-  const deleteMutation = trpc.biometrics.deleteSleepRecord.useMutation({
-    onSuccess: () => {
-      utils.biometrics.getSleepRecords.invalidate()
-      utils.biometrics.getLatestSleep.invalidate()
-      setMode('idle')
-      onActionComplete?.()
-    },
-  })
+  const onSuccess = () => {
+    utils.biometrics.getSleepRecords.invalidate()
+    utils.biometrics.getLatestSleep.invalidate()
+    close()
+    onActionComplete?.()
+  }
+
+  const updateMutation = trpc.biometrics.updateSleepRecord.useMutation({ onSuccess })
+  const deleteMutation = trpc.biometrics.deleteSleepRecord.useMutation({ onSuccess })
+
+  const openEditor = useCallback(() => {
+    setEditBedTime(formatDateTimeLocal(enteredBedAt))
+    setEditWakeTime(formatDateTimeLocal(leftBedAt))
+    setOpen(true)
+  }, [enteredBedAt, leftBedAt])
 
   const handleSave = useCallback(() => {
     updateMutation.mutate({
@@ -65,103 +68,81 @@ export function SleepRecordActions({
   }, [recordId, editBedTime, editWakeTime, updateMutation])
 
   const handleDelete = useCallback(() => {
+    if (!confirmDelete) {
+      setConfirmDelete(true)
+      return
+    }
     deleteMutation.mutate({ id: recordId })
-  }, [recordId, deleteMutation])
+  }, [confirmDelete, recordId, deleteMutation])
 
   const isPending = updateMutation.isPending || deleteMutation.isPending
+  const error = updateMutation.error?.message ?? deleteMutation.error?.message
 
-  if (mode === 'idle') {
-    return (
-      <div className="flex items-center gap-1">
-        <button
-          onClick={() => setMode('edit')}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 active:bg-zinc-800 active:text-zinc-400"
-          title="Edit sleep record"
-        >
-          <Pencil size={12} />
-        </button>
-        <button
-          onClick={() => setMode('confirmDelete')}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 active:bg-zinc-800 active:text-red-400"
-          title="Delete sleep record"
-        >
-          <Trash2 size={12} />
-        </button>
-      </div>
-    )
-  }
-
-  if (mode === 'confirmDelete') {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] text-red-400">Delete?</span>
-        <button
-          onClick={handleDelete}
-          disabled={isPending}
-          className="flex h-8 items-center gap-1 rounded-lg bg-red-900/30 px-2 text-[10px] font-semibold text-red-400 active:bg-red-900/50 disabled:opacity-50"
-        >
-          {deleteMutation.isPending ? <Loader2 size={10} className="animate-spin" /> : 'Yes'}
-        </button>
-        <button
-          onClick={() => setMode('idle')}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 active:bg-zinc-800"
-        >
-          <X size={12} />
-        </button>
-      </div>
-    )
-  }
-
-  // Edit mode
   return (
-    <div className="mt-2 space-y-2 rounded-lg bg-zinc-800/50 p-2">
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-[9px] text-zinc-500">Bedtime</label>
-          <input
-            type="datetime-local"
-            value={editBedTime}
-            onChange={e => setEditBedTime(e.target.value)}
-            className="w-full rounded-md bg-zinc-900 px-2 py-1 text-[11px] text-zinc-200 outline-none focus:ring-1 focus:ring-sky-500"
-          />
-        </div>
-        <div>
-          <label className="text-[9px] text-zinc-500">Wake</label>
-          <input
-            type="datetime-local"
-            value={editWakeTime}
-            onChange={e => setEditWakeTime(e.target.value)}
-            className="w-full rounded-md bg-zinc-900 px-2 py-1 text-[11px] text-zinc-200 outline-none focus:ring-1 focus:ring-sky-500"
-          />
-        </div>
-      </div>
-      <div className="flex items-center justify-end gap-1.5">
-        {(updateMutation.isError || deleteMutation.isError) && (
-          <span className="flex-1 text-[9px] text-red-400">
-            {updateMutation.error?.message ?? deleteMutation.error?.message}
-          </span>
+    <>
+      <button
+        type="button"
+        onClick={openEditor}
+        className="-mr-2 min-h-[44px] shrink-0 px-2 text-[17px] text-sky-400 active:opacity-50"
+      >
+        Edit
+      </button>
+
+      <Sheet
+        open={open}
+        onClose={close}
+        title="Edit sleep"
+        trailing={(
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isPending}
+            className="flex items-center gap-1.5 text-[17px] font-semibold text-sky-400 active:opacity-50 disabled:opacity-40"
+          >
+            {updateMutation.isPending && <Loader2 size={16} className="animate-spin" />}
+            Save
+          </button>
         )}
-        <button
-          onClick={() => setMode('idle')}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 active:bg-zinc-800"
-        >
-          <X size={12} />
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={isPending}
-          className="flex h-8 items-center gap-1 rounded-lg bg-sky-600 px-3 text-[10px] font-semibold text-white active:bg-sky-700 disabled:opacity-50"
-        >
-          {updateMutation.isPending
-            ? (
-                <Loader2 size={10} className="animate-spin" />
-              )
-            : (
-                <Check size={10} />
+      >
+        <div className="space-y-6">
+          <ListSection footer={error}>
+            <ListRow
+              title="Bedtime"
+              accessory={(
+                <input
+                  type="datetime-local"
+                  aria-label="Bedtime"
+                  value={editBedTime}
+                  onChange={e => setEditBedTime(e.target.value)}
+                  className="ios-numeric min-h-[34px] rounded-lg bg-zinc-800 px-2 text-[15px] text-white outline-none focus:ring-2 focus:ring-sky-500"
+                />
               )}
-          Save
-        </button>
-      </div>
-    </div>
+            />
+            <ListRow
+              title="Wake"
+              accessory={(
+                <input
+                  type="datetime-local"
+                  aria-label="Wake"
+                  value={editWakeTime}
+                  onChange={e => setEditWakeTime(e.target.value)}
+                  className="ios-numeric min-h-[34px] rounded-lg bg-zinc-800 px-2 text-[15px] text-white outline-none focus:ring-2 focus:ring-sky-500"
+                />
+              )}
+            />
+          </ListSection>
+
+          <ListSection footer={confirmDelete ? 'Tap again to permanently delete this night.' : undefined}>
+            <ListRow
+              title={confirmDelete ? 'Confirm delete' : 'Delete sleep record'}
+              destructive
+              onClick={handleDelete}
+              disabled={isPending}
+              accessory={deleteMutation.isPending ? <Loader2 size={16} className="animate-spin text-zinc-500" /> : undefined}
+            />
+          </ListSection>
+        </div>
+      </Sheet>
+    </>
   )
 }

@@ -4,17 +4,24 @@ import { useState, useMemo, useCallback } from 'react'
 import { trpc } from '@/src/utils/trpc'
 import { Hypnogram } from './Hypnogram'
 import { StageDistributionBar } from './StageDistributionBar'
-import { QualityScore } from './QualityScore'
 import { TimeRangeSelector, type TimeRange } from './TimeRangeSelector'
 import { WeeklySleepChart } from './WeeklySleepChart'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChartCard } from '@/src/components/biometrics/ChartCard'
+import { WeekNavigator } from '@/src/components/WeekNavigator/WeekNavigator'
 import { useWeekNavigator } from '@/src/hooks/useWeekNavigator'
 import {
   type StageDistribution,
   classifySleepStages,
   calculateDistribution,
   calculateQualityScore,
+  formatDurationHM,
 } from '@/src/lib/sleep-stages'
+
+/** YYYY-MM-DD in local time (toISOString would shift evening bedtimes to the next UTC day). */
+function localDateKey(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
 
 interface SleepStagesCardProps {
   side: 'left' | 'right'
@@ -22,6 +29,8 @@ interface SleepStagesCardProps {
   defaultTimeRange?: TimeRange
   /** When true, hide the night/week/month picker (locks to defaultTimeRange) */
   hideTimeRangeSelector?: boolean
+  /** Appended to the title in dual-side layouts, e.g. "Left". */
+  sideLabel?: string
 }
 
 /** Get the start of the week (Sunday) for a given date */
@@ -63,7 +72,7 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
  *
  * Wired to tRPC biometrics.getSleepStages and biometrics.getSleepRecords.
  */
-export function SleepStagesCard({ side, defaultTimeRange = 'night', hideTimeRangeSelector = false }: SleepStagesCardProps) {
+export function SleepStagesCard({ side, defaultTimeRange = 'night', hideTimeRangeSelector = false, sideLabel }: SleepStagesCardProps) {
   const [timeRange, setTimeRange] = useState<TimeRange>(defaultTimeRange)
   const [weekOffset, setWeekOffset] = useState(0) // 0 = current week, -1 = last week, etc.
   const [monthOffset, setMonthOffset] = useState(0)
@@ -113,10 +122,13 @@ export function SleepStagesCard({ side, defaultTimeRange = 'night', hideTimeRang
   const drillInStages = trpc.biometrics.getSleepStages.useQuery(
     {
       side,
-      startDate: selectedWeekNight ? new Date(selectedWeekNight + 'T00:00:00') : undefined,
+      // A "night" runs 6PM on the selected date to noon the next day, matching
+      // the bedtime-date bucketing above (a midnight-to-midnight window split
+      // two different nights into one hypnogram).
+      startDate: selectedWeekNight ? new Date(selectedWeekNight + 'T18:00:00') : undefined,
       endDate: selectedWeekNight
         ? (() => {
-            const d = new Date(selectedWeekNight + 'T00:00:00')
+            const d = new Date(selectedWeekNight + 'T12:00:00')
             d.setDate(d.getDate() + 1)
             return d
           })()
@@ -189,7 +201,7 @@ export function SleepStagesCard({ side, defaultTimeRange = 'night', hideTimeRang
       if (adjustedDate.getHours() < 6) {
         adjustedDate.setDate(adjustedDate.getDate() - 1)
       }
-      const dateKey = adjustedDate.toISOString().split('T')[0]
+      const dateKey = localDateKey(adjustedDate)
       const existing = nightMap.get(dateKey)
       if (existing) {
         existing.push(record)
@@ -204,7 +216,7 @@ export function SleepStagesCard({ side, defaultTimeRange = 'night', hideTimeRang
     for (let i = 0; i < 7; i++) {
       const day = new Date(startDate)
       day.setDate(day.getDate() + i)
-      const dateKey = day.toISOString().split('T')[0]
+      const dateKey = localDateKey(day)
       const dayRecords = nightMap.get(dateKey) ?? []
 
       let totalSleepHours = 0
@@ -305,13 +317,34 @@ export function SleepStagesCard({ side, defaultTimeRange = 'night', hideTimeRang
     ? nightStages.data
     : (selectedWeekNight ? drillInStages.data : null)
 
+  const nightsWithSleep = weeklyNights.filter(n => n.totalSleepHours > 0)
+  const weeklyAverageMs = nightsWithSleep.length > 0
+    ? (nightsWithSleep.reduce((sum, n) => sum + n.totalSleepHours, 0) / nightsWithSleep.length) * 3_600_000
+    : 0
+
+  const title = timeRange === 'week' ? 'Time asleep' : timeRange === 'month' ? 'Sleep this month' : 'Sleep stages'
+
+  let footnote: string | undefined
+  if (timeRange === 'night' && stagesData?.enteredBedAt) footnote = formatNightDate(new Date(stagesData.enteredBedAt))
+  if (timeRange === 'week' && !isLoading) {
+    footnote = nightsWithSleep.length > 0
+      ? `Average ${formatDurationHM(weeklyAverageMs)} over ${nightsWithSleep.length} ${nightsWithSleep.length === 1 ? 'night' : 'nights'}`
+      : undefined
+  }
+
+  const trailing = timeRange === 'night' && stagesData && stagesData.epochs.length > 0
+    ? (
+        <>
+          Score
+          {' '}
+          <span className="font-semibold text-white">{stagesData.qualityScore}</span>
+        </>
+      )
+    : undefined
+
   return (
-    <div className="space-y-3 rounded-2xl bg-zinc-900/50 p-3 sm:space-y-4 sm:p-4">
-      {/* Header with title and time range */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-white">
-          {timeRange === 'week' ? 'Sleep Timeline' : 'Sleep Stages'}
-        </h2>
+    <ChartCard title={sideLabel ? `${title} · ${sideLabel}` : title} footnote={footnote} trailing={trailing}>
+      <div className="space-y-4">
         {!hideTimeRangeSelector && (
           <TimeRangeSelector
             value={timeRange}
@@ -321,172 +354,125 @@ export function SleepStagesCard({ side, defaultTimeRange = 'night', hideTimeRang
             }}
           />
         )}
-      </div>
 
-      {/* Navigation for week/month — suppressed when a parent owns the week navigator */}
-      {timeRange !== 'night' && startDate && endDate && !useSharedWeek && (
-        <div className="flex items-center justify-between">
-          <button
-            onClick={handlePrev}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white active:bg-zinc-700"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <span className="text-sm text-zinc-300">
-            {formatDateRange(startDate, endDate)}
-          </span>
-          <button
-            onClick={handleNext}
-            disabled={!canGoForward}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white active:bg-zinc-700 disabled:opacity-30"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-      )}
+        {/* Navigation for week/month — suppressed when a parent owns the week navigator */}
+        {timeRange !== 'night' && startDate && endDate && !useSharedWeek && (
+          <WeekNavigator
+            label={formatDateRange(startDate, endDate)}
+            isCurrentWeek={!canGoForward}
+            onPrevious={handlePrev}
+            onNext={handleNext}
+            onToday={() => {
+              setWeekOffset(0)
+              setMonthOffset(0)
+            }}
+          />
+        )}
 
-      {/* Loading */}
-      {isLoading && (
-        <div className="flex h-40 items-center justify-center">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-600 border-t-sky-400" />
-        </div>
-      )}
+        {isLoading && <div className="h-40" aria-busy="true" />}
 
-      {/* Error */}
-      {error && (
-        <div className="rounded-lg bg-red-900/30 p-3 text-center text-sm text-red-400">
-          Failed to load sleep data
-        </div>
-      )}
+        {error && <p className="py-6 text-center text-[15px] text-red-400">Couldn’t load sleep data.</p>}
 
-      {/* Night view */}
-      {!isLoading && !error && timeRange === 'night' && stagesData && (
-        <>
-          {stagesData.epochs.length > 0
+        {/* Night view */}
+        {!isLoading && !error && timeRange === 'night' && (
+          stagesData && stagesData.epochs.length > 0
             ? (
                 <>
-                  {/* Quality score + distribution row */}
-                  <div className="flex items-start gap-4">
-                    <QualityScore score={stagesData.qualityScore} />
-                    <div className="flex-1 space-y-3">
-                      <StageDistributionBar distribution={stagesData.distribution} />
-                    </div>
-                  </div>
-
-                  {/* Night date label */}
-                  {stagesData.enteredBedAt && (
-                    <p className="text-center text-xs text-zinc-500">
-                      {formatNightDate(new Date(stagesData.enteredBedAt))}
-                    </p>
-                  )}
+                  <Hypnogram
+                    blocks={stagesData.blocks}
+                    epochs={stagesData.epochs}
+                    startTime={stagesData.enteredBedAt ?? stagesData.epochs[0].start}
+                    endTime={stagesData.leftBedAt ?? stagesData.epochs[stagesData.epochs.length - 1].start + stagesData.epochs[stagesData.epochs.length - 1].duration}
+                  />
+                  <StageDistributionBar distribution={stagesData.distribution} epochs={stagesData.epochs} />
                 </>
               )
-            : (
-                <div className="flex h-32 items-center justify-center text-sm text-zinc-500">
-                  No sleep data recorded yet
-                </div>
-              )}
-        </>
-      )}
+            : <p className="py-6 text-center text-[15px] text-zinc-500">No sleep stages recorded yet.</p>
+        )}
 
-      {/* Week view */}
-      {!isLoading && !error && timeRange === 'week' && (
-        <>
-          <WeeklySleepChart
-            nights={weeklyNights}
-            onSelectNight={handleWeekNightSelect}
-            selectedDate={selectedWeekNight}
-          />
+        {/* Week view */}
+        {!isLoading && !error && timeRange === 'week' && (
+          <>
+            <WeeklySleepChart
+              nights={weeklyNights}
+              onSelectNight={handleWeekNightSelect}
+              selectedDate={selectedWeekNight}
+            />
 
-          {/* Drill-in: show hypnogram for selected night */}
-          {selectedWeekNight && drillInStages.data && drillInStages.data.epochs.length > 0 && (
-            <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
-              <p className="text-center text-xs text-zinc-400">
-                {formatNightDate(new Date(selectedWeekNight + 'T12:00:00'))}
-              </p>
-              <div className="flex items-start gap-4">
-                <QualityScore score={drillInStages.data.qualityScore} />
-                <div className="flex-1">
-                  <StageDistributionBar distribution={drillInStages.data.distribution} />
+            {selectedWeekNight && drillInStages.data && drillInStages.data.epochs.length > 0 && (
+              <div className="space-y-3 border-t border-zinc-800 pt-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-[15px] font-semibold text-white">
+                    {formatNightDate(new Date(selectedWeekNight + 'T12:00:00'))}
+                  </p>
+                  <p className="ios-numeric text-[15px] text-zinc-500">
+                    Score
+                    {' '}
+                    <span className="font-semibold text-white">{drillInStages.data.qualityScore}</span>
+                  </p>
                 </div>
+                <Hypnogram
+                  blocks={drillInStages.data.blocks}
+                  epochs={drillInStages.data.epochs}
+                  startTime={drillInStages.data.enteredBedAt ?? drillInStages.data.epochs[0].start}
+                  endTime={drillInStages.data.leftBedAt ?? drillInStages.data.epochs[drillInStages.data.epochs.length - 1].start + drillInStages.data.epochs[drillInStages.data.epochs.length - 1].duration}
+                />
+                <StageDistributionBar distribution={drillInStages.data.distribution} epochs={drillInStages.data.epochs} />
               </div>
-              <Hypnogram
-                blocks={drillInStages.data.blocks}
-                epochs={drillInStages.data.epochs}
-                startTime={drillInStages.data.enteredBedAt ?? drillInStages.data.epochs[0].start}
-                endTime={drillInStages.data.leftBedAt ?? drillInStages.data.epochs[drillInStages.data.epochs.length - 1].start + drillInStages.data.epochs[drillInStages.data.epochs.length - 1].duration}
-              />
-            </div>
-          )}
+            )}
 
-          {selectedWeekNight && drillInStages.isLoading && (
-            <div className="flex h-20 items-center justify-center">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-600 border-t-sky-400" />
-            </div>
-          )}
-        </>
-      )}
+            {selectedWeekNight && drillInStages.isLoading && <div className="h-20" aria-busy="true" />}
 
-      {/* Month view */}
-      {!isLoading && !error && timeRange === 'month' && (
-        <div className="space-y-2">
-          {monthlySummaries.length === 0
-            ? (
-                <div className="flex h-32 items-center justify-center text-sm text-zinc-500">
-                  No sleep data this month
-                </div>
-              )
+            {!selectedWeekNight && nightsWithSleep.length > 0 && (
+              <p className="text-[13px] leading-[18px] text-zinc-500">Tap a night to see its stages.</p>
+            )}
+          </>
+        )}
+
+        {/* Month view */}
+        {!isLoading && !error && timeRange === 'month' && (
+          monthlySummaries.length === 0
+            ? <p className="py-6 text-center text-[15px] text-zinc-500">No sleep recorded this month.</p>
             : (
                 <>
-                  {/* Summary stats */}
-                  <div className="grid grid-cols-3 gap-2 rounded-lg bg-zinc-800/50 p-3">
-                    <div className="text-center">
-                      <div className="text-lg font-semibold text-white">
-                        {monthlySummaries.length}
-                      </div>
-                      <div className="text-[10px] text-zinc-500">Nights</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-lg font-semibold text-white">
-                        {(monthlySummaries.reduce((s, n) => s + n.sleepHours, 0) / monthlySummaries.length).toFixed(1)}
-                        h
-                      </div>
-                      <div className="text-[10px] text-zinc-500">Avg Sleep</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-lg font-semibold text-white">
-                        {(monthlySummaries.reduce((s, n) => s + n.timesExited, 0) / monthlySummaries.length).toFixed(1)}
-                      </div>
-                      <div className="text-[10px] text-zinc-500">Avg Exits</div>
-                    </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <MonthStat label="Nights" value={String(monthlySummaries.length)} />
+                    <MonthStat
+                      label="Average sleep"
+                      value={formatDurationHM((monthlySummaries.reduce((s, n) => s + n.sleepHours, 0) / monthlySummaries.length) * 3_600_000)}
+                    />
+                    <MonthStat
+                      label="Average exits"
+                      value={(monthlySummaries.reduce((s, n) => s + n.timesExited, 0) / monthlySummaries.length).toFixed(1)}
+                    />
                   </div>
 
-                  {/* Nightly list */}
-                  <div className="max-h-64 space-y-1 overflow-y-auto">
+                  <div className="max-h-64 overflow-y-auto [&>*+*]:border-t [&>*+*]:border-zinc-800">
                     {monthlySummaries.map(night => (
-                      <div
-                        key={night.id}
-                        className="flex items-center justify-between rounded-lg bg-zinc-800/30 px-3 py-2"
-                      >
-                        <span className="text-xs text-zinc-300">
+                      <div key={night.id} className="ios-numeric flex min-h-[44px] items-center justify-between gap-3 text-[15px]">
+                        <span className="text-white">
                           {night.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                         </span>
-                        <span className="text-xs tabular-nums text-zinc-400">
-                          {(night.sleepHours ?? 0).toFixed(1)}
-                          h
-                        </span>
-                        <span className="text-[10px] text-zinc-500">
-                          {night.timesExited}
-                          {' '}
-                          exits
+                        <span className="text-zinc-500">
+                          {formatDurationHM((night.sleepHours ?? 0) * 3_600_000)}
+                          {` · ${night.timesExited} ${night.timesExited === 1 ? 'exit' : 'exits'}`}
                         </span>
                       </div>
                     ))}
                   </div>
                 </>
-              )}
-        </div>
-      )}
+              )
+        )}
+      </div>
+    </ChartCard>
+  )
+}
+
+function MonthStat({ label, value }: { label: string, value: string }) {
+  return (
+    <div>
+      <p className="ios-numeric text-[22px] font-semibold leading-7 text-white">{value}</p>
+      <p className="text-[13px] leading-[18px] text-zinc-500">{label}</p>
     </div>
   )
 }
