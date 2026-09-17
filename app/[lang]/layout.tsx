@@ -67,6 +67,10 @@ export default async function LangLayout({
         <meta name="color-scheme" content="dark light" />
         <link rel="icon" type="image/png" href="/icon.png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        {/* Home-screen install on iOS: standalone window with the app title */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="sleepypod" />
         <Script id="sp-theme-init" strategy="beforeInteractive">{THEME_INIT_SCRIPT}</Script>
       </head>
       <body>

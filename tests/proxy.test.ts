@@ -45,6 +45,11 @@ describe('proxy host check', () => {
     expect(response?.headers.get('location')).toBe('http://192.168.1.88:3000/en/settings')
   })
 
+  // A locale redirect 404s the web app manifest and breaks iOS home-screen install.
+  it('serves the web app manifest without a locale redirect', () => {
+    expect(proxy(request('/manifest.webmanifest', '192.168.1.88:3000'))).toBeUndefined()
+  })
+
   it('allows hosts listed in SLEEPYPOD_ALLOWED_HOSTS', () => {
     vi.stubEnv('SLEEPYPOD_ALLOWED_HOSTS', '*.tail1234.ts.net')
     expect(proxy(request('/api/mcp', 'pod.tail1234.ts.net'))).toBeUndefined()

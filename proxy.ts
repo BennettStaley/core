@@ -9,7 +9,7 @@ const { locales } = linguiConfig
 //   api    — tRPC + REST endpoints, no locale needed
 //   panel  — tRPC panel dev tool, served as a plain route handler
 //   vendor — static vendored scripts in public/vendor (three.js fallback)
-const NO_LOCALE_PATH = /^\/(?:api|panel(?:\/|$)|vendor\/)/
+const NO_LOCALE_PATH = /^\/(?:api|panel(?:\/|$)|vendor\/|manifest\.webmanifest$)/
 
 const getRequestLocale = (requestHeaders: Headers): string => {
   const langHeader = requestHeaders.get('accept-language') || undefined
@@ -40,14 +40,12 @@ export const proxy = (request: NextRequest) => {
     (locale: string) => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`,
   )
 
-  console.log('Pathname has locale:', pathnameHasLocale)
   if (pathnameHasLocale) {
     return
   }
 
   // Redirect if there is no locale
   const locale = getRequestLocale(request.headers)
-  console.log('Redirecting to locale:', locale) // Debugging: Log the locale being redirected to
 
   request.nextUrl.pathname = `/${locale}${pathname}`
 
