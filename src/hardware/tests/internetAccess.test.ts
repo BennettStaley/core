@@ -29,7 +29,7 @@ vi.mock('node:fs/promises', () => ({
   unlink: vi.fn(async (file: string) => { mocks.files.delete(file) }),
 }))
 
-import { internetAccessChoicePath, restoreInternetAccess } from '../internetAccess'
+import { blockWan, internetAccessChoicePath, parseLanCidrs, restoreInternetAccess } from '../internetAccess'
 import { APP_BLOCK_WAN, FLUSHED, INSTALL_BLOCK_WAN, INTERNET_CONTROL_BLOCK, type Ruleset } from './iptablesRulesets'
 
 const MANUAL_RULES = {
@@ -126,5 +126,30 @@ describe('restoreInternetAccess', () => {
       if (previous === undefined) delete process.env.DATABASE_URL
       else process.env.DATABASE_URL = previous
     }
+  })
+})
+
+describe('extra trusted LAN ranges', () => {
+  it('keeps valid IPv4 CIDRs and drops comments, blanks and junk', () => {
+    expect(parseLanCidrs('# home\n13.0.0.0/24  # main LAN\n\n 100.64.0.0/10\r\n10.0.0.0/7\n1.2.3.4\nnope/24\n'))
+      .toEqual(['13.0.0.0/24', '100.64.0.0/10'])
+  })
+
+  it('blockWan accepts them inbound and outbound before the DROPs', async () => {
+    mocks.files.set('/etc/sleepypod/lan-cidrs', '13.0.0.0/24\n')
+    serve(FLUSHED)
+    await blockWan()
+    const added = mutations()
+    const drop = added.findIndex(args => args.join(' ') === '-A INPUT -j DROP')
+    expect(added.findIndex(args => args.join(' ') === '-A INPUT -s 13.0.0.0/24 -j ACCEPT')).toBeGreaterThan(-1)
+    expect(added.findIndex(args => args.join(' ') === '-A INPUT -s 13.0.0.0/24 -j ACCEPT')).toBeLessThan(drop)
+    expect(added).toContainEqual(['-A', 'OUTPUT', '-d', '13.0.0.0/24', '-j', 'ACCEPT'])
+  })
+
+  it('blockWan still allows RFC 1918 when the file is missing', async () => {
+    serve(FLUSHED)
+    await blockWan()
+    expect(mutations()).toContainEqual(['-A', 'INPUT', '-s', '192.168.0.0/16', '-j', 'ACCEPT'])
+    expect(mutations().some(args => args.includes('13.0.0.0/24'))).toBe(false)
   })
 })

@@ -41,6 +41,32 @@ const IPTABLES = resolveExec('iptables', ['/sbin/iptables', '/usr/sbin/iptables'
 /** scripts/internet-control keeps its allows and DROP here; OUTPUT jumps to it. */
 const SLEEPYPOD_CHAIN = 'SLEEPYPOD-BLOCK'
 
+/**
+ * Extra trusted LAN ranges for home networks numbered outside RFC 1918,
+ * written by `scripts/install --lan-cidr`. Same file and validation as
+ * scripts/lib/iptables-helpers, so the app's block never drops a LAN that
+ * the installer and internet-control trust.
+ */
+const LAN_CIDRS_FILE = '/etc/sleepypod/lan-cidrs'
+const IPV4_CIDR = /^(\d{1,3}\.){3}\d{1,3}\/([89]|[12]\d|3[0-2])$/
+
+/** One CIDR per line; `#` comments, whitespace and anything that isn't an IPv4 CIDR /8–/32 are dropped. */
+export function parseLanCidrs(text: string): string[] {
+  return text
+    .split('\n')
+    .map(line => line.replace(/#.*/, '').replace(/[ \t\r]/g, ''))
+    .filter(line => IPV4_CIDR.test(line))
+}
+
+export async function readExtraLanCidrs(): Promise<string[]> {
+  try {
+    return parseLanCidrs(await readFile(/* turbopackIgnore: true */ LAN_CIDRS_FILE, 'utf8'))
+  }
+  catch {
+    return []
+  }
+}
+
 export type InternetAccessChoice = 'blocked' | 'allowed'
 
 /** Read as root by scripts/internet-control restore; keep the name and format in sync. */
@@ -130,7 +156,7 @@ export async function unblockWan(): Promise<void> {
  * Re-apply LAN-only iptables rules (block WAN).
  * Mirrors the free-sleep block_internet_access.sh logic:
  *   - Allow established connections
- *   - Allow RFC 1918 LAN
+ *   - Allow RFC 1918 LAN and /etc/sleepypod/lan-cidrs
  *   - Allow NTP (port 123)
  *   - Allow mDNS (port 5353)
  *   - Allow loopback
@@ -149,8 +175,8 @@ export async function blockWan(): Promise<void> {
   await run(['-I', 'INPUT', '-m', 'conntrack', '--ctstate', 'ESTABLISHED,RELATED', '-j', 'ACCEPT'])
   await run(['-I', 'OUTPUT', '-m', 'conntrack', '--ctstate', 'ESTABLISHED,RELATED', '-j', 'ACCEPT'])
 
-  // Allow RFC 1918 LAN
-  for (const cidr of ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']) {
+  // Allow RFC 1918 LAN plus any extra trusted ranges
+  for (const cidr of ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', ...await readExtraLanCidrs()]) {
     await run(['-A', 'INPUT', '-s', cidr, '-j', 'ACCEPT'])
     await run(['-A', 'OUTPUT', '-d', cidr, '-j', 'ACCEPT'])
   }
