@@ -7,6 +7,7 @@ import { useSensorFrame, useOnSensorFrame } from '@/src/hooks/useSensorStream'
 import type { CapSenseFrame, CapSense2Frame, SensorFrame } from '@/src/hooks/useSensorStream'
 import { useSideNames } from '@/src/hooks/useSideNames'
 import { trpc } from '@/src/utils/trpc'
+import { disconnectedCovers } from '@/src/components/diagnostics/dashboardLogic'
 import { Card, SectionLabel, Skeleton, StatusDot } from '@/src/components/ds'
 
 /**
@@ -129,7 +130,7 @@ export function PresenceCard() {
                     sub={occ ? presenceSub(occ) : '--'}
                     variance={side === 'left' ? variance.leftVariance : variance.rightVariance}
                     hasFrames={!!frame}
-                    disconnected={sensHealth?.[side]?.connected === false}
+                    disconnected={disconnectedCovers(sensHealth, frame).includes(side)}
                   />
                 )
               })}

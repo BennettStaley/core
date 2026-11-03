@@ -110,8 +110,8 @@ describe('responsive navigation', () => {
   it('lists a disconnected cover sensor only when sensHealth reports it', () => {
     state.health = { status: 'ok', database: { status: 'ok' }, scheduler: {}, iptables: { ok: true } }
     const { rerender } = render(<Sidebar />, { wrapper })
-    // The shell keeps sensHealth subscribed on every page, not just System.
-    expect(subscription).toHaveBeenCalledWith({ sensors: ['sensHealth'] })
+    // The shell keeps sensHealth (and capSense to cross-check it) subscribed on every page, not just System.
+    expect(subscription).toHaveBeenCalledWith({ sensors: ['sensHealth', 'capSense', 'capSense2'] })
     expect(screen.queryByTestId('footer-issues')).toBeNull()
     state.frames = { sensHealth: { type: 'sensHealth', ts: 1, version: 1, left: { connected: true }, right: { connected: true } } }
     rerender(<Sidebar />)
@@ -119,6 +119,13 @@ describe('responsive navigation', () => {
     state.frames = { sensHealth: { type: 'sensHealth', ts: 2, version: 1, left: { connected: false }, right: { connected: true } } }
     rerender(<Sidebar />)
     expect(within(screen.getByTestId('footer-issues')).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Left cover sensor disconnected'])
+    // Pod 5 firmware: connected false on both sides while both covers stream readings.
+    state.frames = {
+      sensHealth: { type: 'sensHealth', ts: 3, version: 1, left: { connected: false }, right: { connected: false } },
+      capSense: { type: 'capSense', ts: 3, left: [1417, 1417, 2652, 2652, 2848, 2848], right: [null, null, null, null, null, null] },
+    }
+    rerender(<Sidebar />)
+    expect(within(screen.getByTestId('footer-issues')).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Right cover sensor disconnected'])
   })
   it('shows release versions and preserves an unknown model name', () => {
     state.status = { podVersion: 'Future pod' }

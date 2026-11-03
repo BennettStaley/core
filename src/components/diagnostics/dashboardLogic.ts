@@ -1,4 +1,4 @@
-import type { SensHealthFrame } from '@/src/hooks/useSensorStream'
+import type { CapSense2Frame, CapSenseFrame, SensHealthFrame } from '@/src/hooks/useSensorStream'
 import { DAYS_OF_WEEK, type DayOfWeek } from '@/src/lib/scheduleTime'
 import type { SchedJob } from './diagnosticsLogic'
 
@@ -79,9 +79,30 @@ const PRIME_STALE_MS = 7 * 24 * HOUR
  * Empty without a frame: older firmware never sends one. Only an explicit
  * `connected: false` counts.
  */
-export function disconnectedCovers(frame: SensHealthFrame | undefined): Array<'left' | 'right'> {
+export function disconnectedCovers(
+  frame: SensHealthFrame | undefined,
+  cap?: CapSenseFrame | CapSense2Frame,
+): Array<'left' | 'right'> {
   if (!frame) return []
-  return (['left', 'right'] as const).filter(side => frame[side]?.connected === false)
+  return (['left', 'right'] as const).filter(side =>
+    frame[side]?.connected === false && !capSideIsLive(cap, side, frame.ts))
+}
+
+/** How far apart (seconds) a capSense frame and a sensHealth frame may be and still describe the same moment. */
+export const CAP_LIVE_WINDOW_S = 30
+
+/**
+ * Pod 5 firmware (NATS dialect) reports `connected: false` for both sides
+ * while the same covers stream capSense with real readings, so the flag alone
+ * raises a false alarm. A disconnected cover shows up in capSense as missing
+ * frames or the -32768 sentinel (normalized to null), so a side whose
+ * capSense carries a numeric reading near the sensHealth timestamp is live.
+ */
+export function capSideIsLive(cap: CapSenseFrame | CapSense2Frame | undefined, side: 'left' | 'right', ts: number): boolean {
+  if (!cap || Math.abs(cap.ts - ts) > CAP_LIVE_WINDOW_S) return false
+  const value: unknown = cap[side]
+  const channels = Array.isArray(value) ? value : [value]
+  return channels.some(v => typeof v === 'number' && Number.isFinite(v))
 }
 
 /**

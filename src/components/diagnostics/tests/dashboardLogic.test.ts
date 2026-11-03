@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  attentionItems, disconnectedCovers, isPodLaneJob, jobsInWindow, nextTemperatureJob, podJobLabel, tonightWindow,
+  attentionItems, CAP_LIVE_WINDOW_S, capSideIsLive, disconnectedCovers, isPodLaneJob, jobsInWindow, nextTemperatureJob, podJobLabel, tonightWindow,
 } from '../dashboardLogic'
 import type { SchedJob } from '../diagnosticsLogic'
 
@@ -108,5 +108,35 @@ describe('disconnectedCovers', () => {
   it('only counts an explicit connected: false', () => {
     expect(disconnectedCovers({ type: 'sensHealth', ts: 1 } as never)).toEqual([])
     expect(disconnectedCovers({ type: 'sensHealth', ts: 1, left: {}, right: { connected: null } } as never)).toEqual([])
+  })
+
+  // Pod 5 NATS firmware says connected: false on both sides while both covers stream real readings.
+  describe('cross-checked against capSense', () => {
+    const cap = (ts: number, left: Array<number | null>, right: Array<number | null>) =>
+      ({ type: 'capSense2' as const, ts, left, right }) as never
+    const live = [1417, 1417, 2652, 2652, 2848, 2848]
+    const gone = [null, null, null, null, null, null]
+
+    it('ignores the flag for a side whose capSense carries readings', () => {
+      expect(disconnectedCovers(frame(false, false), cap(1, live, live))).toEqual([])
+      expect(disconnectedCovers(frame(false, false), cap(1, live, gone))).toEqual(['right'])
+      expect(disconnectedCovers(frame(false, false), cap(1, gone, live))).toEqual(['left'])
+    })
+
+    it('still trusts a connected side whatever capSense shows', () => {
+      expect(disconnectedCovers(frame(true, true), cap(1, gone, gone))).toEqual([])
+    })
+
+    it('trusts the flag when the capSense frame is from another moment', () => {
+      expect(disconnectedCovers(frame(false, false), cap(1 + CAP_LIVE_WINDOW_S, live, live))).toEqual([])
+      expect(disconnectedCovers(frame(false, false), cap(2 + CAP_LIVE_WINDOW_S, live, live))).toEqual(['left', 'right'])
+      expect(disconnectedCovers(frame(false, false), cap(-1 - CAP_LIVE_WINDOW_S, live, live))).toEqual(['left', 'right'])
+    })
+
+    it('reads a scalar capSense side and rejects non-finite values', () => {
+      expect(capSideIsLive({ type: 'capSense', ts: 1, left: 900, right: Number.NaN }, 'left', 1)).toBe(true)
+      expect(capSideIsLive({ type: 'capSense', ts: 1, left: 900, right: Number.NaN }, 'right', 1)).toBe(false)
+      expect(capSideIsLive(undefined, 'left', 1)).toBe(false)
+    })
   })
 })
